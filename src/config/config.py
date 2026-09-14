@@ -1,0 +1,22 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    postgres_db: str
+    postgres_db_port: int
+    postgres_user: str
+    postgres_password: str
+    postgres_host: str
+
+    model_config = SettingsConfigDict(env_file=".env")
+
+    @property
+    def postgres_url(self):
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_db_port}/{self.postgres_db}"
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()

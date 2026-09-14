@@ -1,0 +1,14 @@
+services:
+  db:
+    image: 'postgres:16'
+    container_name: postgres_cinema_theater
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+
