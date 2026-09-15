@@ -126,3 +126,55 @@ async def test_activate_user_token_expired(client):
     assert (
         data["detail"] == f"Activation token {activation_token.token} expired."
     )
+
+
+async def test_login_user_success(client, active_user):
+    response = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+
+
+async def test_login_user_incorrect_password(client, active_user):
+    response = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": "incorectPASs",
+        },
+    )
+    assert response.status_code == 401
+
+
+async def test_login_user_incorrect_email(client):
+    response = await client.post(
+        "/login/",
+        json={
+            "email": "IncorrectEmail@inc.com",
+            "password": "LAlalcsdc",
+        },
+    )
+    assert response.status_code == 401
+
+
+async def test_user_login_not_activated(client):
+    email = "Test@test.com"
+    password = "TestTest1!"
+    response = await client.post(
+        "/register/", json={"email": email, "password": password}
+    )
+    assert response.status_code == 201
+
+    res = await client.post(
+        "/login/", json={"email": email, "password": password}
+    )
+    assert res.status_code == 403
+    data = res.json()
+    assert data["detail"] == "Account not activated."

@@ -3,7 +3,6 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -13,6 +12,8 @@ class Settings(BaseSettings):
     postgres_user: str
     postgres_password: str
     postgres_host: str
+
+    jwt_secret_key: str
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 
@@ -24,6 +25,3 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
-
-
-
