@@ -8,7 +8,8 @@ from starlette import status
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum, ActivationTokenModel
-from schemas.accounts import UserRegistrationResponseSchema, UserRegistrationRequestSchema
+from schemas.accounts import UserRegistrationResponseSchema, UserRegistrationRequestSchema, MessageResponseSchema, \
+    UserActivationRequestSchema
 from security import passwords
 
 router = APIRouter()
@@ -53,5 +54,27 @@ async def register_user(user_data: UserRegistrationRequestSchema, db: AsyncSessi
         email=user.email,
     )
 
+@router.post("/activate/", response_model=MessageResponseSchema, status_code=status.HTTP_200_OK)
+async def activate_user(activation_data: UserActivationRequestSchema, db: AsyncSession = Depends(get_postgresql_db)):
+    db_token = await db.scalar(select(ActivationTokenModel).where(ActivationTokenModel.token == activation_data.token))
+    if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Activation token {activation_data.token} does not exist."
+        )
 
+    if db_token.expires_at < datetime.datetime.now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Activation token {activation_data.token} expired."
+        )
+
+    db_user = await db.scalar(select(UserModel).where(UserModel.id == db_token.user_id))
+    db_user.is_active = True
+
+    await db.delete(db_token)
+    await db.commit()
+    return MessageResponseSchema(
+        message="Account activated successfully.",
+    )
 

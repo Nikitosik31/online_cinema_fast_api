@@ -26,3 +26,12 @@ class UserRegistrationRequestSchema(BaseModel):
 class UserRegistrationResponseSchema(BaseModel):
     id: int
     email: EmailStr
+
+
+class UserActivationRequestSchema(BaseModel):
+    token: str
+
+
+class MessageResponseSchema(BaseModel):
+    message: str
+
