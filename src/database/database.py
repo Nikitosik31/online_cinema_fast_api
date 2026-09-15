@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, AsyncSession
 from sqlalchemy.ext.asyncio.engine import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -28,6 +29,15 @@ async def get_postgresql_db_contextmanager() -> AsyncGenerator[AsyncSession, Non
 
 
 async def init_db() -> None:
+    from database.models.accounts import UserGroupEnum, UserGroupModel
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    async with AsyncPostgresqlSessionLocal() as session:
+        for group_enum in UserGroupEnum:
+            existing_group = await session.scalar(select(UserGroupModel).where(UserGroupModel.name == group_enum))
+            if not existing_group:
+                group = UserGroupModel(name=group_enum)
+                session.add(group)
+                await session.commit()

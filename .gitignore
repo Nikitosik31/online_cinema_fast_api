@@ -12,6 +12,7 @@ venv/
 .env
 .env.*
 !.env.sample
+.env.test
 
 # IDE
 .idea/

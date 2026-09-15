@@ -11,9 +11,25 @@ dependencies = [
     "asyncpg (>=0.31.0,<0.32.0)",
     "pydantic-settings (>=2.15.0,<3.0.0)",
     "greenlet (>=3.5.5,<4.0.0)",
+    "passlib (>=1.7.4,<2.0.0)",
+    "bcrypt (<4.1)",
+    "uvicorn[standard] (>=0.53.0,<0.54.0)",
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.1.1,<10.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    "httpx (>=0.28.1,<0.29.0)"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
