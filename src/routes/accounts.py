@@ -21,6 +21,7 @@ from schemas.accounts import (
     UserActivationRequestSchema,
     UserLoginResponseSchema,
     UserLoginRequestSchema,
+    UserLogoutRequestSchema,
 )
 from security import passwords
 from security.jwt_token import create_access_token
@@ -163,4 +164,31 @@ async def user_login(
     return UserLoginResponseSchema(
         access_token=access_token,
         refresh_token=refresh_token_str,
+    )
+
+
+@router.post(
+    "/logout/",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def logout_user(
+    user_data: UserLogoutRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_refresh_token = await db.scalar(
+        select(RefreshTokenModel).where(
+            RefreshTokenModel.token == user_data.refresh_token
+        )
+    )
+    if not db_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Refresh token does not exist.",
+        )
+
+    await db.delete(db_refresh_token)
+    await db.commit()
+    return MessageResponseSchema(
+        message="Successfully logged out.",
     )

@@ -47,3 +47,5 @@ class UserLoginResponseSchema(BaseModel):
     token_type: str = "bearer"
 
 
+class UserLogoutRequestSchema(BaseModel):
+    refresh_token: str

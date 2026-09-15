@@ -8,6 +8,7 @@ from database.models.accounts import (
     UserModel,
     UserGroupModel,
     UserGroupEnum,
+    RefreshTokenModel,
 )
 from security import passwords
 
@@ -178,3 +179,40 @@ async def test_user_login_not_activated(client):
     assert res.status_code == 403
     data = res.json()
     assert data["detail"] == "Account not activated."
+
+
+async def test_user_logout_success(client, active_user):
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    assert login_res.status_code == 200
+    data_login = login_res.json()
+    assert "access_token" in data_login
+    assert "refresh_token" in data_login
+
+    logout_res = await client.post(
+        "/logout/",
+        json={"refresh_token": data_login["refresh_token"]},
+    )
+    assert logout_res.status_code == 200
+    refresh_token = data_login["refresh_token"]
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        refresh_token_obj = await session.scalar(
+            select(RefreshTokenModel).where(
+                RefreshTokenModel.token == refresh_token
+            )
+        )
+    assert refresh_token_obj is None
+
+
+async def test_user_logout_not_found(client, active_user):
+    response = await client.post(
+        "/logout/", json={"refresh_token": "cihnfdhncdihjncdijsncsdjsdkjjcm"}
+    )
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Refresh token does not exist."
