@@ -22,6 +22,8 @@ from schemas.accounts import (
     UserLoginResponseSchema,
     UserLoginRequestSchema,
     UserLogoutRequestSchema,
+    TokenRefreshResponseSchema,
+    TokenRefreshRequestSchema,
 )
 from security import passwords
 from security.jwt_token import create_access_token
@@ -191,4 +193,43 @@ async def logout_user(
     await db.commit()
     return MessageResponseSchema(
         message="Successfully logged out.",
+    )
+
+
+@router.post(
+    "/refresh/",
+    response_model=TokenRefreshResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def refresh_token(
+    user_data: TokenRefreshRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_refresh_token = await db.scalar(
+        select(RefreshTokenModel).where(
+            RefreshTokenModel.token == user_data.refresh_token
+        )
+    )
+    if not db_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token does not exist.",
+        )
+
+    if db_refresh_token.expires_at < datetime.datetime.now():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired.",
+        )
+
+    db_user = select(
+        UserModel,
+    ).where(UserModel.id == db_refresh_token.user_id)
+
+    user = await db.scalar(db_user)
+
+    access_token = create_access_token({"sub": str(user.id)})
+
+    return TokenRefreshResponseSchema(
+        access_token=access_token,
     )

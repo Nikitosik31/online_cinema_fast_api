@@ -216,3 +216,56 @@ async def test_user_logout_not_found(client, active_user):
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "Refresh token does not exist."
+
+
+async def test_user_refresh_token_success(client, active_user):
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    assert login_res.status_code == 200
+    data = login_res.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+
+    refresh_res = await client.post(
+        "/refresh/", json={"refresh_token": data["refresh_token"]}
+    )
+    assert refresh_res.status_code == 200
+    data = refresh_res.json()
+    assert "access_token" in data
+
+
+async def test_user_refresh_token_not_found(client, active_user):
+    response = await client.post(
+        "/refresh/",
+        json={
+            "refresh_token": "cihnfdhncdijsncsdjwedjnwesdkjjcm",
+        },
+    )
+    assert response.status_code == 401
+    data = response.json()
+    assert data["detail"] == "Refresh token does not exist."
+
+
+async def test_user_refresh_token_expired(client, active_user):
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        refresh_token = RefreshTokenModel(
+            user_id=active_user["id"],
+            token="dcshcsdscdsfdvjsdkjjcdskjdcsjncds",
+            expires_at=datetime.now() - timedelta(days=1),
+        )
+
+        session.add(refresh_token)
+        await session.commit()
+
+    response = await client.post(
+        "/refresh/", json={"refresh_token": refresh_token.token}
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert data["detail"] == "Refresh token expired."

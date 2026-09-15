@@ -12,14 +12,20 @@ class UserRegistrationRequestSchema(BaseModel):
     def validate_password(cls, value: str) -> str:
         if len(value) < 8:
             raise ValueError("Password must contain at least 8 characters.")
-        if not re.search(r'[A-Z]', value):
-            raise ValueError("Password must contain at least one uppercase letter.")
-        if not re.search(r'[a-z]', value):
-            raise ValueError("Password must contain at least one lower letter.")
-        if not re.search(r'\d', value):
+        if not re.search(r"[A-Z]", value):
+            raise ValueError(
+                "Password must contain at least one uppercase letter."
+            )
+        if not re.search(r"[a-z]", value):
+            raise ValueError(
+                "Password must contain at least one lower letter."
+            )
+        if not re.search(r"\d", value):
             raise ValueError("Password must contain at least one digit.")
-        if not re.search(r'[@$!%*?&#]', value):
-            raise ValueError("Password must contain at least one special character: @, $, !, %, *, ?, #, &.")
+        if not re.search(r"[@$!%*?&#]", value):
+            raise ValueError(
+                "Password must contain at least one special character: @, $, !, %, *, ?, #, &."
+            )
         return value
 
 
@@ -49,3 +55,11 @@ class UserLoginResponseSchema(BaseModel):
 
 class UserLogoutRequestSchema(BaseModel):
     refresh_token: str
+
+
+class TokenRefreshRequestSchema(BaseModel):
+    refresh_token: str
+
+
+class TokenRefreshResponseSchema(BaseModel):
+    access_token: str
