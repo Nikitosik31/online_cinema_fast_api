@@ -24,8 +24,10 @@ from schemas.accounts import (
     UserLogoutRequestSchema,
     TokenRefreshResponseSchema,
     TokenRefreshRequestSchema,
+    UserChangePasswordRequestSchema,
 )
 from security import passwords
+from security.dependencies import get_current_user
 from security.jwt_token import create_access_token
 from security.passwords import verify_password
 
@@ -232,4 +234,31 @@ async def refresh_token(
 
     return TokenRefreshResponseSchema(
         access_token=access_token,
+    )
+
+
+@router.post(
+    "/change_password/",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def change_password(
+    user_data: UserChangePasswordRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    if not passwords.verify_password(
+        user_data.old_password, current_user.hashed_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Old password is not correct.",
+        )
+
+    new_hashed_password = passwords.hash_password(user_data.new_password)
+
+    current_user.hashed_password = new_hashed_password
+    await db.commit()
+    return MessageResponseSchema(
+        message="Successfully changed password.",
     )

@@ -269,3 +269,77 @@ async def test_user_refresh_token_expired(client, active_user):
     assert response.status_code == 401
     data = response.json()
     assert data["detail"] == "Refresh token expired."
+
+
+async def test_user_reset_password_success(client, active_user):
+    new_password = "Test123Test!"
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    assert login_res.status_code == 200
+    data = login_res.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+
+    change_password_res = await client.post(
+        "/change_password/",
+        json={
+            "old_password": active_user["password"],
+            "new_password": new_password,
+        },
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+    assert change_password_res.status_code == 200
+
+    login_res_with_old_password = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    assert login_res_with_old_password.status_code != 200
+
+    login_res_with_new_password = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": new_password,
+        },
+    )
+    assert login_res_with_new_password.status_code == 200
+
+
+async def test_user_change_password_old_password_not_found(
+    client, active_user
+):
+    new_password = "Test123Test!"
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+
+    assert login_res.status_code == 200
+    data = login_res.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+
+    change_password_res = await client.post(
+        "/change_password/",
+        json={
+            "old_password": "lcdsmjndcs1!D",
+            "new_password": new_password,
+        },
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+
+    assert change_password_res.status_code == 400
+    data = change_password_res.json()
+    assert data["detail"] == "Old password is not correct."
