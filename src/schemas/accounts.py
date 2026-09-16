@@ -61,3 +61,13 @@ class UserChangePasswordRequestSchema(BaseModel):
 
 class UserResetPasswordRequestSchema(BaseModel):
     email: EmailStr
+
+
+class UserPasswordResetConfirmRequestSchema(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_strength(value)

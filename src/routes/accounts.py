@@ -26,7 +26,7 @@ from schemas.accounts import (
     TokenRefreshResponseSchema,
     TokenRefreshRequestSchema,
     UserChangePasswordRequestSchema,
-    UserResetPasswordRequestSchema,
+    UserResetPasswordRequestSchema, UserPasswordResetConfirmRequestSchema,
 )
 from security import passwords
 from security.dependencies import get_current_user
@@ -292,4 +292,41 @@ async def reset_password(
     await db.commit()
     return MessageResponseSchema(
         message="If this email is registered, a password reset link has been sent.",
+    )
+
+
+@router.post(
+    "/password-reset/confirm/",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_reset_token(
+        user_data: UserPasswordResetConfirmRequestSchema,
+        db: AsyncSession = Depends(get_postgresql_db),
+):
+    stmt = select(PasswordResetTokenModel).where(
+        PasswordResetTokenModel.token == user_data.token
+    )
+    reset_token = await db.scalar(stmt)
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Password reset token does not exist.",
+        )
+    if reset_token.expires_at < datetime.datetime.now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset token expired.",
+        )
+
+    user = await db.scalar(select(UserModel).where(UserModel.id == reset_token.user_id))
+
+    new_hashed_password = passwords.hash_password(user_data.new_password)
+    user.hashed_password = new_hashed_password
+
+    await db.delete(reset_token)
+    await db.commit()
+    return MessageResponseSchema(
+        message="Password has been reset successfully.",
     )

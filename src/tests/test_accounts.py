@@ -438,4 +438,84 @@ async def test_user_password_reset_request_not_activated_user(client):
 
 
 async def test_user_password_reset_confirm_success(client, active_user):
-    res = await client.post()
+    new_password = "NewPassword1!"
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        password_reset_token = PasswordResetTokenModel(
+            user_id=active_user["id"],
+            token=secrets.token_urlsafe(32),
+            expires_at=datetime.now() + timedelta(hours=2),
+        )
+
+        session.add(password_reset_token)
+        await session.commit()
+
+    res = await client.post(
+        "/password-reset/confirm/",
+        json={
+            "token": password_reset_token.token,
+            "new_password": new_password,
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["message"] == "Password has been reset successfully."
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        token = await session.scalar(
+            select(PasswordResetTokenModel).where(
+                PasswordResetTokenModel.user_id == active_user["id"]
+            )
+        )
+    assert not token
+    res_login_old_password = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    res_login_new_password = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": new_password,
+        },
+    )
+
+    assert res_login_new_password.status_code == 200
+    assert res_login_old_password.status_code == 401
+
+
+async def test_user_password_reset_confirm_token_not_found(
+    client, active_user
+):
+    res = await client.post(
+        "/password-reset/confirm/",
+        json={
+            "token": secrets.token_urlsafe(32),
+            "new_password": "NewPassword1!",
+        },
+    )
+
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Password reset token does not exist."
+
+
+async def test_user_password_reset_confirm_token_expired(client, active_user):
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        password_reset_token = PasswordResetTokenModel(
+            user_id=active_user["id"],
+            token=secrets.token_urlsafe(32),
+            expires_at=datetime.now() - timedelta(hours=2),
+        )
+        session.add(password_reset_token)
+        await session.commit()
+
+    res = await client.post(
+        "/password-reset/confirm/",
+        json={
+            "token": password_reset_token.token,
+            "new_password": "NewPassword1!",
+        },
+    )
+    assert res.status_code == 400
+    assert res.json()["detail"] == "Password reset token expired."
