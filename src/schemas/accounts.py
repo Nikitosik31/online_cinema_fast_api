@@ -26,6 +26,10 @@ class MessageResponseSchema(BaseModel):
     message: str
 
 
+class UserActivationResendRequestSchema(BaseModel):
+    email: EmailStr
+
+
 class UserLoginRequestSchema(BaseModel):
     email: EmailStr
     password: str

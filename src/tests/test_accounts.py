@@ -130,6 +130,59 @@ async def test_activate_user_token_expired(client):
     )
 
 
+async def test_user_activation_token_resend(client):
+    register_res = await client.post(
+        "/register/", json={"email": "test@test.com", "password": "Testtest1!"}
+    )
+    assert register_res.status_code == 201
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        token_obj = await session.scalar(
+            select(ActivationTokenModel).where(
+                ActivationTokenModel.user_id == register_res.json()["id"]
+            )
+        )
+
+    activation_resend_res = await client.post(
+        "/activate/resend/", json={"email": "test@test.com"}
+    )
+
+    assert activation_resend_res.status_code == 200
+    assert (
+        activation_resend_res.json()["message"] == "Activation token resent."
+    )
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        new_token = await session.scalar(
+            select(ActivationTokenModel).where(
+                ActivationTokenModel.user_id == register_res.json()["id"]
+            )
+        )
+
+    assert new_token.token != token_obj.token
+    assert new_token.token
+
+
+async def test_user_activation_token_resend_email_not_found(client):
+    activation_resend_res = await client.post(
+        "/activate/resend/", json={"email": "test@test.com"}
+    )
+    assert activation_resend_res.status_code == 200
+    assert (
+        activation_resend_res.json()["message"] == "Activation token resent."
+    )
+
+
+async def test_user_activation_token_resend_user_already_activated(
+    client, active_user
+):
+    resend_res = await client.post(
+        "/activate/resend/", json={"email": active_user["email"]}
+    )
+    assert resend_res.status_code == 200
+    assert resend_res.json()["message"] == "Activation token resent."
+
+
 async def test_login_user_success(client, active_user):
     response = await client.post(
         "/login/",

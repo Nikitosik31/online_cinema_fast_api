@@ -26,7 +26,9 @@ from schemas.accounts import (
     TokenRefreshResponseSchema,
     TokenRefreshRequestSchema,
     UserChangePasswordRequestSchema,
-    UserResetPasswordRequestSchema, UserPasswordResetConfirmRequestSchema,
+    UserResetPasswordRequestSchema,
+    UserPasswordResetConfirmRequestSchema,
+    UserActivationResendRequestSchema,
 )
 from security import passwords
 from security.dependencies import get_current_user
@@ -120,6 +122,41 @@ async def activate_user(
     return MessageResponseSchema(
         message="Account activated successfully.",
     )
+
+
+@router.post(
+    "/activate/resend/",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def activate_resend_user(
+    activation_data: UserActivationResendRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    smtm = select(UserModel).where(UserModel.email == activation_data.email)
+    existing_user = await db.scalar(smtm)
+    if not existing_user or existing_user.is_active:
+        return MessageResponseSchema(
+            message="Activation token resent.",
+        )
+
+    token = await db.scalar(
+        select(ActivationTokenModel).where(
+            ActivationTokenModel.user_id == existing_user.id
+        )
+    )
+    if token:
+        await db.delete(token)
+        await db.commit()
+
+    new_token = ActivationTokenModel(
+        user_id=existing_user.id,
+        token=secrets.token_urlsafe(32),
+        expires_at=datetime.datetime.now() + datetime.timedelta(days=1),
+    )
+    db.add(new_token)
+    await db.commit()
+    return MessageResponseSchema(message="Activation token resent.")
 
 
 @router.post(
@@ -301,8 +338,8 @@ async def reset_password(
     status_code=status.HTTP_200_OK,
 )
 async def confirm_reset_token(
-        user_data: UserPasswordResetConfirmRequestSchema,
-        db: AsyncSession = Depends(get_postgresql_db),
+    user_data: UserPasswordResetConfirmRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
 ):
     stmt = select(PasswordResetTokenModel).where(
         PasswordResetTokenModel.token == user_data.token
@@ -320,7 +357,9 @@ async def confirm_reset_token(
             detail="Password reset token expired.",
         )
 
-    user = await db.scalar(select(UserModel).where(UserModel.id == reset_token.user_id))
+    user = await db.scalar(
+        select(UserModel).where(UserModel.id == reset_token.user_id)
+    )
 
     new_hashed_password = passwords.hash_password(user_data.new_password)
     user.hashed_password = new_hashed_password
