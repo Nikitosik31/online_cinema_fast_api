@@ -17,6 +17,7 @@ from database.models.accounts import (
 from httpx import AsyncClient, ASGITransport
 from main import app
 from database.database import get_postgresql_db
+from security import passwords
 
 test_settings = Settings(_env_file=BASE_DIR / ".env.test")
 
@@ -94,3 +95,32 @@ async def clean_tables():
             if table.name != "user_groups":
                 await session.execute(table.delete())
                 await session.commit()
+
+
+@pytest.fixture
+async def admin_user(client):
+    email = "Admin@admin.com"
+    password = "Admin!1Admin"
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+
+        stmt = select(UserGroupModel).where(
+            UserGroupModel.name == UserGroupEnum.ADMIN
+        )
+        admin = await session.scalar(stmt)
+        admin_user = UserModel(
+            email=email,
+            hashed_password=passwords.hash_password(password),
+            is_active=True,
+            group=admin,
+        )
+
+        session.add(admin_user)
+        await session.commit()
+        await session.refresh(admin_user)
+
+        return {
+            "email": admin_user.email,
+            "password": password,
+            "id": admin_user.id,
+        }
