@@ -13,6 +13,7 @@ from database.models.accounts import (
     UserGroupEnum,
     ActivationTokenModel,
     RefreshTokenModel,
+    PasswordResetTokenModel,
 )
 from schemas.accounts import (
     UserRegistrationResponseSchema,
@@ -25,6 +26,7 @@ from schemas.accounts import (
     TokenRefreshResponseSchema,
     TokenRefreshRequestSchema,
     UserChangePasswordRequestSchema,
+    UserResetPasswordRequestSchema,
 )
 from security import passwords
 from security.dependencies import get_current_user
@@ -261,4 +263,33 @@ async def change_password(
     await db.commit()
     return MessageResponseSchema(
         message="Successfully changed password.",
+    )
+
+
+@router.post(
+    "/password-reset/request/",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def reset_password(
+    user_data: UserResetPasswordRequestSchema,
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    stmt = select(UserModel).where(UserModel.email == user_data.email)
+    user = await db.scalar(stmt)
+    if not user or not user.is_active:
+        return MessageResponseSchema(
+            message="If this email is registered, a password reset link has been sent.",
+        )
+
+    reset_token = PasswordResetTokenModel(
+        user_id=user.id,
+        token=secrets.token_urlsafe(32),
+        expires_at=datetime.datetime.now() + datetime.timedelta(hours=2),
+    )
+
+    db.add(reset_token)
+    await db.commit()
+    return MessageResponseSchema(
+        message="If this email is registered, a password reset link has been sent.",
     )

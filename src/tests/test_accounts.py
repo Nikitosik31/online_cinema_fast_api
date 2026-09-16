@@ -9,6 +9,7 @@ from database.models.accounts import (
     UserGroupModel,
     UserGroupEnum,
     RefreshTokenModel,
+    PasswordResetTokenModel,
 )
 from security import passwords
 
@@ -343,3 +344,98 @@ async def test_user_change_password_old_password_not_found(
     assert change_password_res.status_code == 400
     data = change_password_res.json()
     assert data["detail"] == "Old password is not correct."
+
+
+async def test_user_password_reset_request_success(client, active_user):
+    res = await client.post(
+        "/password-reset/request/",
+        json={
+            "email": active_user["email"],
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert (
+        data["message"]
+        == "If this email is registered, a password reset link has been sent."
+    )
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        password_reset_token = await session.scalar(
+            select(PasswordResetTokenModel).where(
+                PasswordResetTokenModel.user_id == active_user["id"]
+            )
+        )
+
+    assert password_reset_token
+
+
+async def test_user_password_reset_request_email_not_found(
+    client, active_user
+):
+    res = await client.post(
+        "/password-reset/request/",
+        json={
+            "email": "not_found@email.com",
+        },
+    )
+
+    assert res.status_code == 200
+    data = res.json()
+    assert (
+        data["message"]
+        == "If this email is registered, a password reset link has been sent."
+    )
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        password_reset_token = await session.scalar(
+            select(PasswordResetTokenModel).where(
+                PasswordResetTokenModel.user_id == active_user["id"]
+            )
+        )
+
+    assert not password_reset_token
+
+
+async def test_user_password_reset_request_not_activated_user(client):
+    email = "email@email.com"
+    password = "Password1!"
+    register_res = await client.post(
+        "/register/",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+    assert register_res.status_code == 201
+
+    reset_res = await client.post(
+        "/password-reset/request/",
+        json={
+            "email": email,
+        },
+    )
+
+    assert reset_res.status_code == 200
+    data = reset_res.json()
+    assert (
+        data["message"]
+        == "If this email is registered, a password reset link has been sent."
+    )
+
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        user = await session.scalar(
+            select(UserModel).where(UserModel.email == email)
+        )
+
+        reset_token = await session.scalar(
+            select(PasswordResetTokenModel).where(
+                PasswordResetTokenModel.user_id == user.id
+            )
+        )
+
+    assert not reset_token
+
+
+async def test_user_password_reset_confirm_success(client, active_user):
+    res = await client.post()

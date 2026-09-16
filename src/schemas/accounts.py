@@ -57,3 +57,7 @@ class UserChangePasswordRequestSchema(BaseModel):
     @classmethod
     def validate_password(cls, value: str) -> str:
         return validate_password_strength(value)
+
+
+class UserResetPasswordRequestSchema(BaseModel):
+    email: EmailStr
