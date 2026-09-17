@@ -15,6 +15,7 @@ from database.models.accounts import (
     RefreshTokenModel,
     PasswordResetTokenModel,
 )
+from notifications.email import send_email
 from schemas.accounts import (
     UserRegistrationResponseSchema,
     UserRegistrationRequestSchema,
@@ -33,7 +34,6 @@ from schemas.accounts import (
 from security import passwords
 from security.dependencies import get_current_user
 from security.jwt_token import create_access_token
-from security.passwords import verify_password
 
 router = APIRouter()
 
@@ -79,6 +79,14 @@ async def register_user(
     )
     db.add(activation_token)
     await db.commit()
+
+    await send_email(
+        to=user.email,
+        subject="Activation link",
+        body=f"Click the link to activate your account: "
+        f"http://localhost:8000/activate/?token="
+        f"{activation_token.token}",
+    )
 
     return UserRegistrationResponseSchema(
         id=user.id,
@@ -156,6 +164,15 @@ async def activate_resend_user(
     )
     db.add(new_token)
     await db.commit()
+
+    await send_email(
+        to=existing_user.email,
+        subject="Activation link",
+        body=f"Click the link to activate your account: "
+        f"http://localhost:8000/activate/?token="
+        f"{new_token.token}",
+    )
+
     return MessageResponseSchema(message="Activation token resent.")
 
 
@@ -327,6 +344,15 @@ async def reset_password(
 
     db.add(reset_token)
     await db.commit()
+
+    await send_email(
+        to=user.email,
+        subject="Password reset",
+        body=f"Click the link to reset your password: "
+        f"http://localhost:8000/password-reset/confirm/?token="
+        f"{reset_token.token}",
+    )
+
     return MessageResponseSchema(
         message="If this email is registered, a password reset link has been sent.",
     )

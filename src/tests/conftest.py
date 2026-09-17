@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -124,3 +126,8 @@ async def admin_user(client):
             "password": password,
             "id": admin_user.id,
         }
+
+
+@pytest.fixture(autouse=True)
+def mock_send_user(monkeypatch):
+    monkeypatch.setattr("routes.accounts.send_email", AsyncMock())
