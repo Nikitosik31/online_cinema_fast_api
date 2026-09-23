@@ -34,7 +34,8 @@ from schemas.accounts import (
 )
 from security import passwords
 from security.dependencies import get_current_user
-from security.jwt_token import create_access_token
+from security.dependencies import get_jwt_token_manager
+from security.jwt_interfaces import JWTAuthManagerInterface
 
 router = APIRouter()
 
@@ -275,6 +276,7 @@ async def activate_resend_user(
 async def user_login(
     user_data: UserLoginRequestSchema,
     db: AsyncSession = Depends(get_postgresql_db),
+    jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_token_manager),
 ):
     db_user = await db.scalar(
         select(UserModel).where(UserModel.email == user_data.email)
@@ -299,7 +301,7 @@ async def user_login(
             detail="Account not activated.",
         )
 
-    access_token = create_access_token({"sub": str(db_user.id)})
+    access_token = jwt_manager.create_access_token({"sub": str(db_user.id)})
 
     refresh_token_str = secrets.token_urlsafe(32)
 
@@ -390,6 +392,7 @@ async def logout_user(
 async def refresh_token(
     user_data: TokenRefreshRequestSchema,
     db: AsyncSession = Depends(get_postgresql_db),
+    jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_token_manager),
 ):
     db_refresh_token = await db.scalar(
         select(RefreshTokenModel).where(
@@ -414,7 +417,7 @@ async def refresh_token(
 
     user = await db.scalar(db_user)
 
-    access_token = create_access_token({"sub": str(user.id)})
+    access_token = jwt_manager.create_access_token({"sub": str(user.id)})
 
     return TokenRefreshResponseSchema(
         access_token=access_token,

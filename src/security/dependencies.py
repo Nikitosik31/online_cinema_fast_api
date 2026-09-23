@@ -1,22 +1,38 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic_settings import BaseSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.config import get_settings
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum
-from security.jwt_token import decode_token
+from exceptions.security import TokenExpiredError, InvalidTokenError
+from security.token_manager import JWTAuthManager
+from security.jwt_interfaces import JWTAuthManagerInterface
 
 security_scheme = HTTPBearer()
+
+
+async def get_jwt_token_manager(
+    settings: BaseSettings = Depends(get_settings),
+) -> JWTAuthManagerInterface:
+    return JWTAuthManager(
+        secret_key_access=settings.jwt_secret_key, algorithm="HS256"
+    )
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     db: AsyncSession = Depends(get_postgresql_db),
+    jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_token_manager),
 ):
-    payload = decode_token(credentials.credentials)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        payload = jwt_manager.decode_access_token(credentials.credentials)
+    except TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
     payload["sub"] = int(payload["sub"])
 
