@@ -3,6 +3,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -40,8 +41,32 @@ router = APIRouter()
 
 @router.post(
     "/register/",
+    summary="User registration",
+    description="Register a new user with email and password.",
     response_model=UserRegistrationResponseSchema,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        409: {
+            "description": "Conflict - User with this email already exists.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "A user with this email test@test.com already exists."
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Internal Server Error - An error occurred during user creation.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "An error occurred during user creation."
+                    }
+                }
+            },
+        },
+    },
 )
 async def register_user(
     user_data: UserRegistrationRequestSchema,
@@ -60,25 +85,31 @@ async def register_user(
     )
     hashed_password = passwords.hash_password(user_data.password)
 
-    user = UserModel(
-        email=user_data.email,
-        hashed_password=hashed_password,
-        group=user_group,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    try:
+        user = UserModel(
+            email=user_data.email,
+            hashed_password=hashed_password,
+            group=user_group,
+        )
+        db.add(user)
+        await db.flush()
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.datetime.now() + datetime.timedelta(hours=24)
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.datetime.now() + datetime.timedelta(hours=24)
 
-    activation_token = ActivationTokenModel(
-        user_id=user.id,
-        token=token,
-        expires_at=expires_at,
-    )
-    db.add(activation_token)
-    await db.commit()
+        activation_token = ActivationTokenModel(
+            user_id=user.id,
+            token=token,
+            expires_at=expires_at,
+        )
+        db.add(activation_token)
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during user creation.",
+        ) from e
 
     await send_email(
         to=user.email,
@@ -96,8 +127,32 @@ async def register_user(
 
 @router.post(
     "/activate/",
+    summary="User activation",
+    description="The user clicks the link to activate their account, if token approved, user will be activated.",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        404: {
+            "description": "Activation token does not exist.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Activation token kejnrkejrnfkjcnerkjer@^bjcxndjc does not exist."
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Activation token expired.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Activation token ljejnffkjernfkjern343vdfdvfd32 expired.",
+                    }
+                }
+            },
+        },
+    },
 )
 async def activate_user(
     activation_data: UserActivationRequestSchema,
@@ -134,6 +189,8 @@ async def activate_user(
 
 @router.post(
     "/activate/resend/",
+    summary="Resend activation link",
+    description="If user don't activate his account, user will be resent activation link.",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
 )
@@ -155,7 +212,7 @@ async def activate_resend_user(
     )
     if token:
         await db.delete(token)
-        await db.commit()
+        await db.flush()
 
     new_token = ActivationTokenModel(
         user_id=existing_user.id,
@@ -178,8 +235,42 @@ async def activate_resend_user(
 
 @router.post(
     "/login/",
+    summary="Login user",
+    description="Authenticate user and returns access and refresh token",
     response_model=UserLoginResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        401: {
+            "description": "User input invalid email or password.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Invalid email or password.",
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Account not activated.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Account not activated.",
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Internal Server Error - An error occurred during user login.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "An error occurred during user login.",
+                    }
+                }
+            },
+        },
+    },
 )
 async def user_login(
     user_data: UserLoginRequestSchema,
@@ -212,14 +303,23 @@ async def user_login(
 
     refresh_token_str = secrets.token_urlsafe(32)
 
-    refresh_token = RefreshTokenModel(
-        user_id=db_user.id,
-        token=refresh_token_str,
-        expires_at=datetime.datetime.now() + datetime.timedelta(days=7),
-    )
+    try:
+        refresh_token = RefreshTokenModel(
+            user_id=db_user.id,
+            token=refresh_token_str,
+            expires_at=datetime.datetime.now() + datetime.timedelta(days=7),
+        )
 
-    db.add(refresh_token)
-    await db.commit()
+        db.add(refresh_token)
+        await db.flush()
+        await db.commit()
+
+    except SQLAlchemyError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during user login.",
+        ) from e
 
     return UserLoginResponseSchema(
         access_token=access_token,
@@ -229,8 +329,22 @@ async def user_login(
 
 @router.post(
     "/logout/",
+    summary="Logout user",
+    description="User logout from his account",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        404: {
+            "description": "Refresh token not found.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Refresh token does not exist.",
+                    }
+                }
+            },
+        }
+    },
 )
 async def logout_user(
     user_data: UserLogoutRequestSchema,
@@ -256,8 +370,22 @@ async def logout_user(
 
 @router.post(
     "/refresh/",
+    summary="Refresh access token",
+    description="Refresh access token using a valid refresh token",
     response_model=TokenRefreshResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        401: {
+            "description": "Refresh token does not exist or expired.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Refresh token does not exist or expired.",
+                    }
+                }
+            },
+        }
+    },
 )
 async def refresh_token(
     user_data: TokenRefreshRequestSchema,
@@ -295,8 +423,22 @@ async def refresh_token(
 
 @router.post(
     "/change_password/",
+    summary="Change user password",
+    description="Change user password to a different one",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "description": "The user entered the old password incorrectly.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Old password is not correct.",
+                    }
+                }
+            },
+        }
+    },
 )
 async def change_password(
     user_data: UserChangePasswordRequestSchema,
@@ -321,9 +463,23 @@ async def change_password(
 
 
 @router.post(
-    "/password-reset/request/",
+    "/password_reset/request/",
+    summary="Request password reset",
+    description="Request password reset link",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        500: {
+            "description": "The password reset link was not sent.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "An error occurred during password reset.",
+                    }
+                }
+            },
+        }
+    },
 )
 async def reset_password(
     user_data: UserResetPasswordRequestSchema,
@@ -336,20 +492,27 @@ async def reset_password(
             message="If this email is registered, a password reset link has been sent.",
         )
 
-    reset_token = PasswordResetTokenModel(
-        user_id=user.id,
-        token=secrets.token_urlsafe(32),
-        expires_at=datetime.datetime.now() + datetime.timedelta(hours=2),
-    )
+    try:
+        reset_token = PasswordResetTokenModel(
+            user_id=user.id,
+            token=secrets.token_urlsafe(32),
+            expires_at=datetime.datetime.now() + datetime.timedelta(hours=2),
+        )
 
-    db.add(reset_token)
-    await db.commit()
+        db.add(reset_token)
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during password reset.",
+        )
 
     await send_email(
         to=user.email,
         subject="Password reset",
         body=f"Click the link to reset your password: "
-        f"http://localhost:8000/password-reset/confirm/?token="
+        f"http://localhost:8000/password_reset/confirm/?token="
         f"{reset_token.token}",
     )
 
@@ -359,9 +522,43 @@ async def reset_password(
 
 
 @router.post(
-    "/password-reset/confirm/",
+    "/password_reset/confirm/",
+    summary="Confirm password reset",
+    description="Confirm password reset link",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    responses={
+        404: {
+            "description": "Password reset token does not exist.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Password reset token does not exist.",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "The password reset token expired.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Password reset token expired.",
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "An error occurred during password reset.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "An error occurred during password reset.",
+                    }
+                }
+            },
+        },
+    },
 )
 async def confirm_reset_token(
     user_data: UserPasswordResetConfirmRequestSchema,
@@ -388,10 +585,18 @@ async def confirm_reset_token(
     )
 
     new_hashed_password = passwords.hash_password(user_data.new_password)
-    user.hashed_password = new_hashed_password
 
-    await db.delete(reset_token)
-    await db.commit()
+    try:
+        user.hashed_password = new_hashed_password
+        await db.delete(reset_token)
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during password reset.",
+        )
+
     return MessageResponseSchema(
         message="Password has been reset successfully.",
     )

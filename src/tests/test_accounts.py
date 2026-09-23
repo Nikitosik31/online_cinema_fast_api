@@ -401,7 +401,7 @@ async def test_user_change_password_old_password_not_found(
 
 async def test_user_password_reset_request_success(client, active_user):
     res = await client.post(
-        "/password-reset/request/",
+        "/password_reset/request/",
         json={
             "email": active_user["email"],
         },
@@ -427,7 +427,7 @@ async def test_user_password_reset_request_email_not_found(
     client, active_user
 ):
     res = await client.post(
-        "/password-reset/request/",
+        "/password_reset/request/",
         json={
             "email": "not_found@email.com",
         },
@@ -463,7 +463,7 @@ async def test_user_password_reset_request_not_activated_user(client):
     assert register_res.status_code == 201
 
     reset_res = await client.post(
-        "/password-reset/request/",
+        "/password_reset/request/",
         json={
             "email": email,
         },
@@ -503,7 +503,7 @@ async def test_user_password_reset_confirm_success(client, active_user):
         await session.commit()
 
     res = await client.post(
-        "/password-reset/confirm/",
+        "/password_reset/confirm/",
         json={
             "token": password_reset_token.token,
             "new_password": new_password,
@@ -542,7 +542,7 @@ async def test_user_password_reset_confirm_token_not_found(
     client, active_user
 ):
     res = await client.post(
-        "/password-reset/confirm/",
+        "/password_reset/confirm/",
         json={
             "token": secrets.token_urlsafe(32),
             "new_password": "NewPassword1!",
@@ -564,7 +564,7 @@ async def test_user_password_reset_confirm_token_expired(client, active_user):
         await session.commit()
 
     res = await client.post(
-        "/password-reset/confirm/",
+        "/password_reset/confirm/",
         json={
             "token": password_reset_token.token,
             "new_password": "NewPassword1!",
