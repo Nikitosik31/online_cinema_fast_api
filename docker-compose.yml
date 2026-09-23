@@ -1,0 +1,26 @@
+services:
+  db:
+    image: 'postgres:16'
+    container_name: postgres_cinema_theater
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: 'redis:7-alpine'
+    container_name: redis_cinema_theater
+    ports:
+      - "6379:6379"
+
+  mailhog:
+    image: 'mailhog/mailhog'
+    container_name: mailhog_cinema_theater
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres_data:

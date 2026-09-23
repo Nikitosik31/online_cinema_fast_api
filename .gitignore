@@ -12,6 +12,7 @@ venv/
 .env
 .env.*
 !.env.sample
+.env.test
 
 # IDE
 .idea/
@@ -29,3 +30,5 @@ venv/
 .coverage
 .pytest_cache/
 htmlcov/
+
+celerybeat-schedule*
