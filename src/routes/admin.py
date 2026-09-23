@@ -9,10 +9,41 @@ from schemas.accounts import MessageResponseSchema
 from schemas.admin import UserChangeGroupRequestSchema
 from security.dependencies import require_admin
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(
+    prefix="/admin",
+    responses={
+        403: {
+            "description": "User aren't an admin",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "You are not an administrator",
+                    }
+                }
+            },
+        }
+    },
+)
 
 
-@router.patch("/users/{user_id}/activate/", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/users/{user_id}/activate/",
+    summary="Activate user by admin",
+    description="Admin can activate user",
+    status_code=status.HTTP_200_OK,
+    responses={
+        404: {
+            "description": "User not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "User not found",
+                    }
+                }
+            },
+        }
+    },
+)
 async def activate_user_by_admin(
     user_id: int,
     db: AsyncSession = Depends(get_postgresql_db),
@@ -37,6 +68,20 @@ async def activate_user_by_admin(
     "/users/{user_id}/group/",
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
+    summary="Change user group by admin",
+    description="Admin can change user group for users",
+    responses={
+        404: {
+            "description": "User not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "User not found",
+                    }
+                }
+            },
+        }
+    },
 )
 async def change_user_group_by_admin(
     user_id: int,
