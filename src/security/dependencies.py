@@ -57,3 +57,17 @@ async def require_admin(
             status_code=403, detail="You are not an administrator"
         )
     return current_user
+
+
+async def require_moderator(
+    db: AsyncSession = Depends(get_postgresql_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    group = await db.scalar(
+        select(UserGroupModel).where(
+            UserGroupModel.id == current_user.group_id
+        )
+    )
+    if group.name not in (UserGroupEnum.MODERATOR, UserGroupEnum.ADMIN):
+        raise HTTPException(status_code=403, detail="You are not a moderator")
+    return current_user

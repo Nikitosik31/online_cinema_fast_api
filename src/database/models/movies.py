@@ -23,7 +23,7 @@ movie_genres_model = Table(
     Base.metadata,
     Column(
         "movie_id",
-        ForeignKey("movies.py.id"),
+        ForeignKey("movies.id"),
         primary_key=True,
         nullable=False,
     ),
@@ -37,7 +37,7 @@ movie_directors_model = Table(
     Base.metadata,
     Column(
         "movie_id",
-        ForeignKey("movies.py.id"),
+        ForeignKey("movies.id"),
         primary_key=True,
         nullable=False,
     ),
@@ -54,7 +54,7 @@ movie_stars_model = Table(
     Base.metadata,
     Column(
         "movie_id",
-        ForeignKey("movies.py.id"),
+        ForeignKey("movies.id"),
         primary_key=True,
         nullable=False,
     ),
@@ -105,7 +105,7 @@ class CertificationModel(Base):
 
 
 class MovieModel(Base):
-    __tablename__ = "movies.py"
+    __tablename__ = "movies"
     __table_args__ = (
         UniqueConstraint(
             "name", "year", "time", name="uq_movie_name_year_time"
@@ -128,16 +128,20 @@ class MovieModel(Base):
     )
 
     genres: Mapped[list[GenreModel]] = relationship(
-        "GenreModel", secondary=movie_genres_model, back_populates="movies.py"
+        "GenreModel",
+        secondary=movie_genres_model,
+        back_populates="movies",
     )
     directors: Mapped[list[DirectorModel]] = relationship(
         "DirectorModel",
         secondary=movie_directors_model,
-        back_populates="movies.py",
+        back_populates="movies",
     )
     stars: Mapped[list[StarModel]] = relationship(
-        "StarModel", secondary=movie_stars_model, back_populates="movies.py"
+        "StarModel",
+        secondary=movie_stars_model,
+        back_populates="movies",
     )
     certification: Mapped[CertificationModel] = relationship(
-        "CertificationModel", back_populates="movies.py"
+        "CertificationModel", back_populates="movies"
     )
