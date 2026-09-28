@@ -22,7 +22,10 @@ movie_genres_model = Table(
     "movie_genres",
     Base.metadata,
     Column(
-        "movie_id", ForeignKey("movies.id"), primary_key=True, nullable=False
+        "movie_id",
+        ForeignKey("movies.py.id"),
+        primary_key=True,
+        nullable=False,
     ),
     Column(
         "genre_id", ForeignKey("genres.id"), primary_key=True, nullable=False
@@ -33,7 +36,10 @@ movie_directors_model = Table(
     "movie_directors",
     Base.metadata,
     Column(
-        "movie_id", ForeignKey("movies.id"), primary_key=True, nullable=False
+        "movie_id",
+        ForeignKey("movies.py.id"),
+        primary_key=True,
+        nullable=False,
     ),
     Column(
         "director_id",
@@ -47,7 +53,10 @@ movie_stars_model = Table(
     "movie_stars",
     Base.metadata,
     Column(
-        "movie_id", ForeignKey("movies.id"), primary_key=True, nullable=False
+        "movie_id",
+        ForeignKey("movies.py.id"),
+        primary_key=True,
+        nullable=False,
     ),
     Column(
         "star_id", ForeignKey("stars.id"), primary_key=True, nullable=False
@@ -96,7 +105,7 @@ class CertificationModel(Base):
 
 
 class MovieModel(Base):
-    __tablename__ = "movies"
+    __tablename__ = "movies.py"
     __table_args__ = (
         UniqueConstraint(
             "name", "year", "time", name="uq_movie_name_year_time"
@@ -113,22 +122,22 @@ class MovieModel(Base):
     meta_score: Mapped[Optional[float]] = mapped_column(Float)
     gross: Mapped[Optional[float]] = mapped_column(Float)
     description: Mapped[str] = mapped_column(Text)
-    price: Mapped[decimal.Decimal] = mapped_column(Numeric(10, 2))
+    price: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(10, 2))
     certification_id: Mapped[int] = mapped_column(
         ForeignKey("certifications.id")
     )
 
     genres: Mapped[list[GenreModel]] = relationship(
-        "GenreModel", secondary=movie_genres_model, back_populates="movies"
+        "GenreModel", secondary=movie_genres_model, back_populates="movies.py"
     )
     directors: Mapped[list[DirectorModel]] = relationship(
         "DirectorModel",
         secondary=movie_directors_model,
-        back_populates="movies",
+        back_populates="movies.py",
     )
     stars: Mapped[list[StarModel]] = relationship(
-        "StarModel", secondary=movie_stars_model, back_populates="movies"
+        "StarModel", secondary=movie_stars_model, back_populates="movies.py"
     )
     certification: Mapped[CertificationModel] = relationship(
-        "CertificationModel", back_populates="movies"
+        "CertificationModel", back_populates="movies.py"
     )
