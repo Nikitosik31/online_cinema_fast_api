@@ -4,8 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
-from database.models.movies import GenreModel
-from schemas.movies import GenreResponseSchema, GenreCreateUpdateRequestSchema
+from database.models.movies import GenreModel, StarModel
+from schemas.movies import (
+    GenreResponseSchema,
+    GenreCreateUpdateRequestSchema,
+    StarResponseSchema,
+    StarCreateUpdateRequestSchema,
+)
 from security.dependencies import require_moderator
 
 router = APIRouter(
@@ -160,5 +165,133 @@ async def delete_genre(
         )
 
     await db.delete(genre)
+    await db.commit()
+    return
+
+
+@router.post(
+    "/stars/",
+    summary="Create a new star",
+    description="Create a new star (actor). Only available to moderators and admins.",
+    response_model=StarResponseSchema,
+    status_code=201,
+    responses={
+        409: {
+            "description": "Conflict - Star with this name already exists",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Star with this name already exists",
+                    }
+                }
+            },
+        }
+    },
+)
+async def create_star(
+    star_data: StarCreateUpdateRequestSchema,
+    current_user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_star = await db.scalar(
+        select(StarModel).where(StarModel.name == star_data.name)
+    )
+    if db_star:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+
+    new_star = StarModel(name=star_data.name)
+    db.add(new_star)
+    await db.commit()
+    return StarResponseSchema.model_validate(new_star)
+
+
+@router.patch(
+    "/stars/{star_id}/",
+    summary="Update a star",
+    description="Update a star by its ID. Only available to moderators and admins.",
+    response_model=StarResponseSchema,
+    status_code=200,
+    responses={
+        409: {
+            "description": "Conflict - Star with this name already exists",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Star with this name already exists",
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Star with this id does not exist",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Star with this id does not exist",
+                    }
+                }
+            },
+        },
+    },
+)
+async def update_star(
+    star_id: int,
+    star_data: StarCreateUpdateRequestSchema,
+    current_user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_star = await db.scalar(select(StarModel).where(StarModel.id == star_id))
+    if not db_star:
+        raise HTTPException(
+            status_code=404, detail="Star with this id does not exist"
+        )
+
+    existing_star = await db.scalar(
+        select(StarModel).where(
+            StarModel.name == star_data.name, StarModel.id != star_id
+        )
+    )
+
+    if existing_star:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+
+    db_star.name = star_data.name
+    await db.commit()
+    return StarResponseSchema.model_validate(db_star)
+
+
+@router.delete(
+    "/stars/{star_id}/",
+    summary="Delete a star",
+    description="Delete a star by its ID. Only available to moderators and admins.",
+    status_code=204,
+    responses={
+        404: {
+            "description": "Star with this id does not exist",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Star with this id does not exist",
+                    }
+                }
+            },
+        }
+    },
+)
+async def delete_star(
+    star_id: int,
+    current_user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_star = await db.scalar(select(StarModel).where(StarModel.id == star_id))
+    if not db_star:
+        raise HTTPException(
+            status_code=404, detail="Star with this id does not exist"
+        )
+    await db.delete(db_star)
     await db.commit()
     return

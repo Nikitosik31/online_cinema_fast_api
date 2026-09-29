@@ -181,6 +181,30 @@ async def existing_genre(client, moderator_user):
     }
 
 
+@pytest.fixture
+async def existing_star(client, moderator_user):
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": moderator_user["email"],
+            "password": moderator_user["password"],
+        },
+    )
+    access_token = login_res.json()["access_token"]
+
+    create_res = await client.post(
+        "/movies/stars/",
+        json={"name": "Brad Pitt"},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    return {
+        "id": create_res.json()["id"],
+        "name": "Brad Pitt",
+        "access_token": access_token,
+    }
+
+
 @pytest.fixture(autouse=True)
 def mock_send_user(monkeypatch):
     monkeypatch.setattr("routes.accounts.send_email", AsyncMock())
