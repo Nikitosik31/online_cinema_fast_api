@@ -14,7 +14,9 @@ class Base(AsyncAttrs, DeclarativeBase):
 
 engine = create_async_engine(get_settings().postgres_url)
 
-AsyncPostgresqlSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+AsyncPostgresqlSessionLocal = async_sessionmaker(
+    bind=engine, class_=AsyncSession, expire_on_commit=False
+)
 
 
 async def get_postgresql_db() -> AsyncGenerator[AsyncSession, None]:
@@ -23,21 +25,37 @@ async def get_postgresql_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 @asynccontextmanager
-async def get_postgresql_db_contextmanager() -> AsyncGenerator[AsyncSession, None]:
+async def get_postgresql_db_contextmanager() -> (
+    AsyncGenerator[AsyncSession, None]
+):
     async with AsyncPostgresqlSessionLocal() as session:
         yield session
 
 
 async def init_db() -> None:
     from database.models.accounts import UserGroupEnum, UserGroupModel
+    from database.models.movies import CertificationEnum, CertificationModel
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncPostgresqlSessionLocal() as session:
         for group_enum in UserGroupEnum:
-            existing_group = await session.scalar(select(UserGroupModel).where(UserGroupModel.name == group_enum))
+            existing_group = await session.scalar(
+                select(UserGroupModel).where(UserGroupModel.name == group_enum)
+            )
             if not existing_group:
                 group = UserGroupModel(name=group_enum)
                 session.add(group)
+                await session.commit()
+
+        for certification in CertificationEnum:
+            existing_certification = await session.scalar(
+                select(CertificationModel).where(
+                    CertificationModel.name == certification
+                )
+            )
+            if not existing_certification:
+                sertificat = CertificationModel(name=certification)
+                session.add(sertificat)
                 await session.commit()

@@ -1,4 +1,5 @@
 import decimal
+from enum import StrEnum
 from uuid import UUID, uuid4
 from typing import Optional
 
@@ -62,6 +63,15 @@ movie_stars_model = Table(
         "star_id", ForeignKey("stars.id"), primary_key=True, nullable=False
     ),
 )
+
+
+class CertificationEnum(StrEnum):
+    G = "G"
+    PG = "PG"
+    PGM = "PGM"
+    PG_13 = "PG-13"
+    R = "R"
+    NC_17 = "NC-17"
 
 
 class GenreModel(Base):

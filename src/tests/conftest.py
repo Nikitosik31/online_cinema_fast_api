@@ -17,6 +17,8 @@ from database.models.accounts import (
     ActivationTokenModel,
 )
 from httpx import AsyncClient, ASGITransport
+
+from database.models.movies import CertificationEnum, CertificationModel
 from main import app
 from database.database import get_postgresql_db
 from security import passwords
@@ -44,6 +46,17 @@ async def setup_test_db():
             if not existing_group:
                 group = UserGroupModel(name=group_enum)
                 session.add(group)
+                await session.commit()
+
+        for certification in CertificationEnum:
+            existing_certification = await session.scalar(
+                select(CertificationModel).where(
+                    CertificationModel.name == certification
+                )
+            )
+            if not existing_certification:
+                sertificat = CertificationModel(name=certification)
+                session.add(sertificat)
                 await session.commit()
 
     yield
@@ -94,7 +107,7 @@ async def clean_tables():
     yield
     async with test_AsyncPostgresqlSessionLocal() as session:
         for table in reversed(Base.metadata.sorted_tables):
-            if table.name != "user_groups":
+            if table.name not in ("user_groups", "certifications"):
                 await session.execute(table.delete())
                 await session.commit()
 
@@ -202,6 +215,51 @@ async def existing_star(client, moderator_user):
         "id": create_res.json()["id"],
         "name": "Brad Pitt",
         "access_token": access_token,
+    }
+
+
+@pytest.fixture
+async def existing_movie(client, moderator_user):
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        certification = await session.scalar(
+            select(CertificationModel).where(
+                CertificationModel.name == CertificationEnum.G
+            )
+        )
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": moderator_user["email"],
+            "password": moderator_user["password"],
+        },
+    )
+    access_token = login_res.json()["access_token"]
+
+    movie_res = await client.post(
+        "/movies/",
+        json={
+            "name": "Inception",
+            "year": 2010,
+            "time": 148,
+            "imdb": 8.8,
+            "votes": 2000000,
+            "description": "A thief who steals corporate secrets...",
+            "certification_id": certification.id,
+            "genres": ["Sci-Fi", "Action"],
+            "directors": ["Christopher Nolan"],
+            "stars": ["Leonardo DiCaprio"],
+        },
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    data = movie_res.json()
+    return {
+        "id": data["id"],
+        "name": data["name"],
+        "year": data["year"],
+        "time": data["time"],
+        "access_token": access_token,
+        "certification_id": data["certification"]["id"],
     }
 
 
