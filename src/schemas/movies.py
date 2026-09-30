@@ -111,3 +111,11 @@ class MovieUpdateRequestSchema(BaseModel):
     genres: Optional[list[str]] = None
     directors: Optional[list[str]] = None
     stars: Optional[list[str]] = None
+
+
+class GenreWithMovieCountResponseSchema(BaseModel):
+    id: int
+    name: str
+    movie_count: int
+
+    model_config = ConfigDict(from_attributes=True)

@@ -190,13 +190,13 @@ async def existing_genre(client, moderator_user):
 
     create_res = await client.post(
         "/movies/genres/",
-        json={"name": "Action"},
+        json={"name": "Documentary"},
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
     return {
         "id": create_res.json()["id"],
-        "name": "Action",
+        "name": "Documentary",
         "access_token": access_token,
     }
 

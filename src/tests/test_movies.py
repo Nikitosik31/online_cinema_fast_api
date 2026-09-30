@@ -253,3 +253,21 @@ class TestGetMovieDetails:
         )
         assert res.status_code == 404
         assert res.json() == {"detail": "Movie with this id does not exist"}
+
+
+class TestGetMovieByGenre:
+    async def test_get_movie_by_genre_success(
+        self, client, existing_movie, existing_genre
+    ):
+        res = await client.get(
+            f"/movies/genres/",
+        )
+        assert res.status_code == 200
+
+        data = res.json()
+        genres_by_name = {g["name"]: g["movie_count"] for g in data}
+
+        assert genres_by_name[existing_genre["name"]] == 0
+
+        assert genres_by_name["Sci-Fi"] >= 1
+        assert genres_by_name["Action"] >= 1

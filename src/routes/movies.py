@@ -1,13 +1,43 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from database.database import get_postgresql_db
-from database.models.movies import MovieModel
-from schemas.movies import MovieDetailResponseSchema
+from database.models.movies import MovieModel, GenreModel, movie_genres_model
+from schemas.movies import (
+    MovieDetailResponseSchema,
+    GenreWithMovieCountResponseSchema,
+)
 
 router = APIRouter(prefix="/movies")
+
+
+@router.get(
+    "/genres/",
+    summary="List genres with movie counts",
+    description="Returns a list of all genres along with how many movies belong to each. Publicly accessible, no authentication required.",
+    response_model=list[GenreWithMovieCountResponseSchema],
+    status_code=200,
+)
+async def get_movie_genres(
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    stmt = (
+        select(
+            GenreModel.id,
+            GenreModel.name,
+            func.count(movie_genres_model.c.movie_id).label("movie_count"),
+        )
+        .outerjoin(
+            movie_genres_model, movie_genres_model.c.genre_id == GenreModel.id
+        )
+        .group_by(GenreModel.id, GenreModel.name)
+    )
+    result = await db.execute(stmt)
+    db_genres = result.all()
+
+    return db_genres
 
 
 @router.get(
