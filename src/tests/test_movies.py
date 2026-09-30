@@ -220,3 +220,36 @@ class TestUpdateMovie:
             },
         )
         assert update_res.status_code == 404
+
+
+class TestGetMovieDetails:
+    async def test_get_movie_details_success(self, client, existing_movie):
+        res = await client.get(
+            f"/movies/{existing_movie['id']}/",
+        )
+        assert res.status_code == 200
+
+        data = res.json()
+        assert data["id"] == existing_movie["id"]
+        assert data["name"] == existing_movie["name"]
+        assert data["year"] == existing_movie["year"]
+        assert data["time"] == existing_movie["time"]
+        assert (
+            data["certification"]["id"] == existing_movie["certification_id"]
+        )
+
+        genre_names = {g["name"] for g in data["genres"]}
+        assert genre_names == {"Sci-Fi", "Action"}
+
+        director_names = {d["name"] for d in data["directors"]}
+        assert director_names == {"Christopher Nolan"}
+
+        star_names = {s["name"] for s in data["stars"]}
+        assert star_names == {"Leonardo DiCaprio"}
+
+    async def test_get_movie_details_not_found(self, client, existing_movie):
+        res = await client.get(
+            f"/movies/999999999/",
+        )
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Movie with this id does not exist"}
