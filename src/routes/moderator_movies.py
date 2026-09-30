@@ -19,6 +19,7 @@ from schemas.movies import (
     StarCreateUpdateRequestSchema,
     MovieCreateRequestSchema,
     MovieDetailResponseSchema,
+    MovieUpdateRequestSchema,
 )
 from security.dependencies import require_moderator
 
@@ -314,11 +315,11 @@ async def delete_star(
     status_code=201,
     responses={
         409: {
-            "description": "Conflict - Movie with this name already exists",
+            "description": "Conflict - Movie with this name, year and time already exists",
             "content": {
                 "application/json": {
                     "example": {
-                        "detail": "Movie with this name already exists",
+                        "detail": "Movie with this name, year and time already exists",
                     }
                 }
             },
@@ -433,3 +434,97 @@ async def create_movie(
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Invalid input data.")
+
+
+@router.patch(
+    "/{movie_id}/",
+    response_model=MovieDetailResponseSchema,
+    summary="Update a Movie",
+    description="Update a movie by its ID. Only available to moderators and admins.",
+    status_code=200,
+    responses={
+        404: {
+            "description": "Movie with this id does not exist",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Movie with this id does not exist",
+                    }
+                }
+            },
+        },
+        409: {
+            "description": "Conflict - Movie with this name, year and time already exists",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Movie with this name, year and time already exists",
+                    }
+                }
+            },
+        },
+    },
+)
+async def patch_movie(
+    movie_id: int,
+    movie_data: MovieUpdateRequestSchema,
+    current_user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_movie = await db.scalar(
+        select(MovieModel).where(MovieModel.id == movie_id)
+    )
+    if not db_movie:
+        raise HTTPException(
+            status_code=404, detail="Movie with this id does not exist"
+        )
+
+    if movie_data.certification_id is not None:
+        certification = await db.scalar(
+            select(CertificationModel).where(
+                CertificationModel.id == movie_data.certification_id,
+            )
+        )
+        if not certification:
+            raise HTTPException(
+                status_code=404,
+                detail="Certification with this id does not exist",
+            )
+
+    new_name = (
+        movie_data.name if movie_data.name is not None else db_movie.name
+    )
+    new_year = (
+        movie_data.year if movie_data.year is not None else db_movie.year
+    )
+    new_time = (
+        movie_data.time if movie_data.time is not None else db_movie.time
+    )
+
+    duplicate = await db.scalar(
+        select(MovieModel).where(
+            MovieModel.name == new_name,
+            MovieModel.year == new_year,
+            MovieModel.time == new_time,
+            MovieModel.id != movie_id,
+        )
+    )
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie with this name, year and time already exists",
+        )
+
+    for field, value in movie_data.model_dump(exclude_unset=True).items():
+        setattr(db_movie, field, value)
+
+    try:
+        await db.commit()
+        await db.refresh(
+            db_movie, ["certification", "genres", "stars", "directors"]
+        )
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid input data.")
+
+    return MovieDetailResponseSchema.model_validate(db_movie)

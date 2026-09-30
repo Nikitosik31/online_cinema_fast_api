@@ -163,10 +163,17 @@ async def moderator_user(client):
         await session.commit()
         await session.refresh(moderator_user)
 
+        login_res = await client.post(
+            "/login/",
+            json={"email": email, "password": password},
+        )
+        access_token = login_res.json()["access_token"]
+
         return {
             "email": moderator_user.email,
             "password": password,
             "id": moderator_user.id,
+            "access_token": access_token,
         }
 
 

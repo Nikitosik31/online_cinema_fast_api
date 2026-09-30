@@ -4,6 +4,7 @@ from database.models.movies import (
     CertificationModel,
     CertificationEnum,
     GenreModel,
+    MovieModel,
 )
 from conftest import test_AsyncPostgresqlSessionLocal
 
@@ -140,3 +141,82 @@ class TestCreateMovie:
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert movie_res.status_code == 404
+
+
+class TestUpdateMovie:
+    async def test_update_movie_success(
+        self, client, moderator_user, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={
+                "name": "Interstellar",
+            },
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        assert update_res.status_code == 200
+
+    async def test_update_movie_not_found(self, client, moderator_user):
+        update_res = await client.patch(
+            "/movies/99999999/",
+            json={"name": "Test"},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert update_res.status_code == 404
+        assert update_res.json() == {
+            "detail": "Movie with this id does not exist"
+        }
+
+    async def test_update_movie_duplicate(
+        self, client, moderator_user, existing_movie
+    ):
+        movie_res = await client.post(
+            "/movies/",
+            json={
+                "name": "Interstellar",
+                "year": 2020,
+                "time": 150,
+                "imdb": 8.8,
+                "votes": 2000000,
+                "description": "A thief who steals corporate secrets...",
+                "certification_id": existing_movie["certification_id"],
+                "genres": ["Sci-Fi", "Action"],
+                "directors": ["Christopher Nolan"],
+                "stars": ["Leonardo DiCaprio"],
+            },
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={
+                "name": "Interstellar",
+                "year": 2020,
+                "time": 150,
+            },
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert update_res.status_code == 409
+
+    async def test_update_movie_certification_not_found(
+        self, client, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={
+                "certification_id": "999",
+            },
+            headers={
+                "Authorization": f"Bearer {existing_movie['access_token']}"
+            },
+        )
+        assert update_res.status_code == 404
