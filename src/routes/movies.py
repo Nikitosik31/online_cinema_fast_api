@@ -43,6 +43,62 @@ async def get_movie_genres(
 
 
 @router.get(
+    "/",
+    response_model=MovieListResponseSchema,
+)
+async def get_movies_list(
+    db: AsyncSession = Depends(get_postgresql_db),
+    page: int = Query(1, ge=1, description="Page number (1-based index)"),
+    per_page: int = Query(
+        10, ge=1, le=20, description="Number of items per page"
+    ),
+    genre_id: int | None = Query(None, description="Filter by genre id"),
+):
+    offset = (page - 1) * per_page
+    filters = []
+    if genre_id is not None:
+        filters.append(MovieModel.genres.any(GenreModel.id == genre_id))
+    count_stmt = select(func.count(MovieModel.id)).where(*filters)
+    result_count = await db.execute(count_stmt)
+    total_items = result_count.scalar() or 0
+
+    stmt = (
+        select(MovieModel)
+        .where(*filters)
+        .options(selectinload(MovieModel.genres))
+        .order_by(MovieModel.id)
+    )
+
+    stmt = stmt.offset(offset).limit(per_page)
+
+    result = await db.execute(stmt)
+    db_movies = result.scalars().all() or []
+
+    movie_list = [
+        MovieListItemResponseSchema.model_validate(movie)
+        for movie in db_movies
+    ]
+    total_pages = (total_items + per_page - 1) // per_page
+    prev_page_number = min(page - 1, total_pages)
+
+    return MovieListResponseSchema(
+        movies=movie_list,
+        prev_page=(
+            f"/movies/?page={prev_page_number}&per_page={per_page}"
+            if prev_page_number >= 1
+            else None
+        ),
+        next_page=(
+            f"/movies/?page={page + 1}&per_page={per_page}"
+            if page < total_pages
+            else None
+        ),
+        total_pages=total_pages,
+        total_items=total_items,
+    )
+
+
+@router.get(
     "/{movie_id}/",
     summary="Get movie details",
     description="Retrieve full details of a single movie by its ID. Publicly accessible, no authentication required.",
@@ -85,55 +141,3 @@ async def get_movie_details(
         )
 
     return MovieDetailResponseSchema.model_validate(db_movie)
-
-
-@router.get(
-    "/",
-    response_model=MovieListResponseSchema,
-)
-async def get_movies_list(
-    db: AsyncSession = Depends(get_postgresql_db),
-    page: int = Query(1, ge=1, description="Page number (1-based index)"),
-    per_page: int = Query(
-        10, ge=1, le=20, description="Number of items per page"
-    ),
-):
-    offset = (page - 1) * per_page
-
-    count_stmt = select(func.count(MovieModel.id))
-    result_count = await db.execute(count_stmt)
-    total_items = result_count.scalar() or 0
-
-    stmt = (
-        select(MovieModel)
-        .options(selectinload(MovieModel.genres))
-        .order_by(MovieModel.id)
-    )
-
-    stmt = stmt.offset(offset).limit(per_page)
-
-    result = await db.execute(stmt)
-    db_movies = result.scalars().all() or []
-
-    movie_list = [
-        MovieListItemResponseSchema.model_validate(movie)
-        for movie in db_movies
-    ]
-    total_pages = (total_items + per_page - 1) // per_page
-    prev_page_number = min(page - 1, total_pages)
-
-    return MovieListResponseSchema(
-        movies=movie_list,
-        prev_page=(
-            f"/movies/?page={prev_page_number}&per_page={per_page}"
-            if prev_page_number >= 1
-            else None
-        ),
-        next_page=(
-            f"/movies/?page={page + 1}&per_page={per_page}"
-            if page < total_pages
-            else None
-        ),
-        total_pages=total_pages,
-        total_items=total_items,
-    )

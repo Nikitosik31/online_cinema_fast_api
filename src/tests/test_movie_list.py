@@ -97,7 +97,19 @@ class TestMovieList:
 
 
 class TestFilterMovies:
-    pass
+    async def test_filter_movies_by_genre_id(self, client, create_movie):
+        movie1 = await create_movie("Movie", genres=["Drama"])
+        await create_movie("Test", genres=["Comedy"])
+
+        res = await client.get(
+            f"/movies/?genre_id={movie1['genres'][0]['id']}"
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["movies"]) == 1
+        assert data["movies"][0]["name"] == movie1["name"]
+        assert data["total_items"] == 1
+        assert data["total_pages"] == 1
 
 
 class TestSortMovies:
