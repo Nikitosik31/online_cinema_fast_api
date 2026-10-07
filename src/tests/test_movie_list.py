@@ -257,6 +257,31 @@ class TestSortMovies:
         movies_id = [movie["id"] for movie in data["movies"]]
         assert movies_id == [movie1["id"], movie3["id"], movie2["id"]]
 
+    async def test_sort_movies_with_unknown_sort_by_returns_422(
+        self, client, create_movie
+    ):
+        res = await client.get(f"/movies/?sort_by=unknown&order=asc")
+        assert res.status_code == 422
+        data = res.json()
+        assert "detail" in data
+
+    async def test_list_movies_pagination_links_keep_sort_params(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", year=2010)
+        movie2 = await create_movie("Test", year=2020)
+        movie3 = await create_movie("Test2", year=2000)
+
+        res = await client.get(
+            f"/movies/?page=1&per_page=2&sort_by=year&order=desc"
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert (
+            data["next_page"]
+            == "/movies/?page=2&per_page=2&sort_by=year&order=desc"
+        )
+
 
 class TestSearchMovies:
     pass
