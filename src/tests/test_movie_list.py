@@ -288,11 +288,22 @@ class TestSearchMovies:
         self, client, create_movie
     ):
         movie1 = await create_movie("Movie")
-        movie2 = await create_movie("Test")
-        movie3 = await create_movie("Test2")
+        await create_movie("Test")
+        await create_movie("Test2")
 
         res = await client.get("/movies/?search=MO")
         assert res.status_code == 200
         data = res.json()
         assert data["movies"][0]["name"] == movie1["name"]
         assert data["total_items"] == 1
+
+    async def test_search_movies_by_star_name_returns_matching_movies(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", stars=["Tom HANKS"])
+        await create_movie("Test", stars=["Brad Pitt"])
+        res = await client.get("/movies/?search=hank")
+        assert res.status_code == 200
+        data = res.json()
+        ids = [movie["id"] for movie in data["movies"]]
+        assert ids == [movie1["id"]]
