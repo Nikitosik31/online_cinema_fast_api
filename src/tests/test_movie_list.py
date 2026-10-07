@@ -205,7 +205,18 @@ class TestFilterMovies:
 
 
 class TestSortMovies:
-    pass
+    async def test_sort_movies_by_year_desc_returns_newest_first(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", year=2010)
+        movie2 = await create_movie("Test", year=2000)
+        movie3 = await create_movie("Test2", year=2020)
+
+        res = await client.get(f"/movies/?sort_by=year&order=desc")
+        assert res.status_code == 200
+        data = res.json()
+        years = [movie["year"] for movie in data["movies"]]
+        assert years == [movie3["year"], movie1["year"], movie2["year"]]
 
 
 class TestSearchMovies:

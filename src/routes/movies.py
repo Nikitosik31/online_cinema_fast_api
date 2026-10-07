@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +59,18 @@ async def get_movies_list(
     imdb_min: float | None = Query(
         None, description="Filter by min imdb rating"
     ),
+    sort_by: Literal["price", "year", "votes"] | None = Query(
+        None, description="Field to sort by"
+    ),
+    order: Literal["asc", "desc"] = Query("asc", description="Sort direction"),
 ):
+
+    sort_columns = {
+        "year": MovieModel.year,
+        "price": MovieModel.price,
+        "votes": MovieModel.votes,
+    }
+
     offset = (page - 1) * per_page
     filters = []
     if genre_id:
@@ -73,6 +86,17 @@ async def get_movies_list(
     if imdb_min is not None:
         filters.append(MovieModel.imdb >= imdb_min)
 
+    order_clauses = []
+    if sort_by is not None:
+        column = sort_columns[sort_by]
+        if order == "asc":
+            column_asc = column.asc()
+            order_clauses.append(column_asc)
+        else:
+            column_desc = column.desc()
+            order_clauses.append(column_desc)
+    order_clauses.append(MovieModel.id)
+
     count_stmt = select(func.count(MovieModel.id)).where(*filters)
     result_count = await db.execute(count_stmt)
     total_items = result_count.scalar() or 0
@@ -81,7 +105,7 @@ async def get_movies_list(
         select(MovieModel)
         .where(*filters)
         .options(selectinload(MovieModel.genres))
-        .order_by(MovieModel.id)
+        .order_by(*order_clauses)
     )
 
     stmt = stmt.offset(offset).limit(per_page)
