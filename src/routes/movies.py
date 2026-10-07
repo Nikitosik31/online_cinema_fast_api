@@ -1,4 +1,5 @@
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, or_
@@ -142,6 +143,7 @@ async def get_movies_list(
 
     prev_page_number = min(page - 1, total_pages)
 
+    search_query = f"&search={quote(search)}" if search else ""
     sort_by_query = (
         f"&sort_by={sort_by}&order={order}" if sort_by is not None else ""
     )
@@ -153,14 +155,14 @@ async def get_movies_list(
         prev_page=(
             f"/movies/?page={prev_page_number}&per_page="
             f"{per_page}{genre_query}{year_query}"
-            f"{imdb_query}{sort_by_query}"
+            f"{imdb_query}{search_query}{sort_by_query}"
             if prev_page_number >= 1
             else None
         ),
         next_page=(
             f"/movies/?page={page + 1}&per_page="
             f"{per_page}{genre_query}{year_query}"
-            f"{imdb_query}{sort_by_query}"
+            f"{imdb_query}{search_query}{sort_by_query}"
             if page < total_pages
             else None
         ),

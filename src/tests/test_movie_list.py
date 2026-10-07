@@ -361,3 +361,17 @@ class TestSearchMovies:
         ids = [movie["id"] for movie in data["movies"]]
         assert ids == [movie1["id"]]
         assert data["total_items"] == 1
+
+    async def test_list_movies_pagination_links_keep_search(
+        self, client, create_movie
+    ):
+        await create_movie("Movie")
+        await create_movie("Movie2")
+        await create_movie("Movie3")
+        await create_movie("Test")
+
+        res = await client.get("/movies/?page=1&per_page=2&search=movie")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["next_page"] == "/movies/?page=2&per_page=2&search=movie"
+        assert data["total_items"] == 3
