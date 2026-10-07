@@ -111,6 +111,36 @@ class TestFilterMovies:
         assert data["total_items"] == 1
         assert data["total_pages"] == 1
 
+    async def test_filter_movies_by_nonexistent_genre_returns_empty_list(
+        self, client, create_movie
+    ):
+        await create_movie("Test")
+        res = await client.get("/movies/?genre_id=99999")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["movies"] == []
+        assert data["total_pages"] == 0
+        assert data["total_items"] == 0
+        assert data["next_page"] is None
+        assert data["prev_page"] is None
+
+    async def test_filter_movies_by_multiple_genre_ids_returns_movies_of_any_genre(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", genres=["Drama"])
+        movie2 = await create_movie("Test", genres=["Comedy"])
+        await create_movie("Test2", genres=["Horror"])
+
+        res = await client.get(
+            f"/movies/?genre_id={movie1['genres'][0]['id']}&genre_id={movie2['genres'][0]['id']}"
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["movies"]) == 2
+        ids = {movie["id"] for movie in data["movies"]}
+        assert ids == {movie1["id"], movie2["id"]}
+        assert data["total_items"] == 2
+
 
 class TestSortMovies:
     pass

@@ -52,12 +52,12 @@ async def get_movies_list(
     per_page: int = Query(
         10, ge=1, le=20, description="Number of items per page"
     ),
-    genre_id: int | None = Query(None, description="Filter by genre id"),
+    genre_id: list[int] | None = Query(None, description="Filter by genre id"),
 ):
     offset = (page - 1) * per_page
     filters = []
-    if genre_id is not None:
-        filters.append(MovieModel.genres.any(GenreModel.id == genre_id))
+    if genre_id:
+        filters.append(MovieModel.genres.any(GenreModel.id.in_(genre_id)))
     count_stmt = select(func.count(MovieModel.id)).where(*filters)
     result_count = await db.execute(count_stmt)
     total_items = result_count.scalar() or 0
