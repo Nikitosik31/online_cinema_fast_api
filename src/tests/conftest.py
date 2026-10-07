@@ -270,6 +270,79 @@ async def existing_movie(client, moderator_user):
     }
 
 
+@pytest.fixture
+async def create_movie(client, moderator_user):
+    async with test_AsyncPostgresqlSessionLocal() as session:
+        certification = await session.scalar(
+            select(CertificationModel).where(
+                CertificationModel.name == CertificationEnum.G
+            )
+        )
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": moderator_user["email"],
+            "password": moderator_user["password"],
+        },
+    )
+    access_token = login_res.json()["access_token"]
+
+    async def _create(
+        name,
+        year=2010,
+        time=148,
+        imdb=8.8,
+        votes=2000000,
+        description="A thief who steals corporate secrets...",
+        certification_id=certification.id,
+        genres=None,
+        directors=None,
+        stars=None,
+    ):
+
+        if genres is None:
+            genres = ["Sci-Fi", "Action"]
+
+        if directors is None:
+            directors = ["Christopher Nolan"]
+
+        if stars is None:
+            stars = ["Leonardo DiCaprio"]
+
+        movie_res = await client.post(
+            "/movies/",
+            json={
+                "name": name,
+                "year": year,
+                "time": time,
+                "imdb": imdb,
+                "votes": votes,
+                "description": description,
+                "certification_id": certification_id,
+                "genres": genres,
+                "directors": directors,
+                "stars": stars,
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        data = movie_res.json()
+        return {
+            "id": data["id"],
+            "name": data["name"],
+            "year": data["year"],
+            "time": data["time"],
+            "imdb": data["imdb"],
+            "votes": data["votes"],
+            "description": data["description"],
+            "genres": data["genres"],
+            "directors": data["directors"],
+            "stars": data["stars"],
+        }
+
+    return _create
+
+
 @pytest.fixture(autouse=True)
 def mock_send_user(monkeypatch):
     monkeypatch.setattr("routes.accounts.send_email", AsyncMock())
