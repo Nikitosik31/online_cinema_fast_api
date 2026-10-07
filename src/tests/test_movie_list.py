@@ -154,6 +154,25 @@ class TestFilterMovies:
         assert len(data["movies"]) == 1
         assert data["total_items"] == 1
 
+    async def test_list_movies_pagination_links_keep_genre_filter(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Movie", genres=["Comedy"])
+        await create_movie("Test", genres=["Comedy"])
+        await create_movie("Test2", genres=["Comedy"])
+        await create_movie("Test3", genres=["Horror"])
+
+        res = await client.get(
+            f"/movies/?page=1&per_page=2&genre_id={movie['genres'][0]['id']}"
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert (
+            data["next_page"]
+            == f"/movies/?page=2&per_page=2&genre_id={movie['genres'][0]['id']}"
+        )
+        assert data["total_items"] == 3
+
 
 class TestSortMovies:
     pass

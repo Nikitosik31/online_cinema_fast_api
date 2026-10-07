@@ -80,16 +80,16 @@ async def get_movies_list(
     ]
     total_pages = (total_items + per_page - 1) // per_page
     prev_page_number = min(page - 1, total_pages)
-
+    genre_query = "".join(f"&genre_id={genr_id}" for genr_id in genre_id or [])
     return MovieListResponseSchema(
         movies=movie_list,
         prev_page=(
-            f"/movies/?page={prev_page_number}&per_page={per_page}"
+            f"/movies/?page={prev_page_number}&per_page={per_page}{genre_query}"
             if prev_page_number >= 1
             else None
         ),
         next_page=(
-            f"/movies/?page={page + 1}&per_page={per_page}"
+            f"/movies/?page={page + 1}&per_page={per_page}{genre_query}"
             if page < total_pages
             else None
         ),
