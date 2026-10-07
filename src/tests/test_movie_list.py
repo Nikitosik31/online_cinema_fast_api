@@ -212,11 +212,37 @@ class TestSortMovies:
         movie2 = await create_movie("Test", year=2000)
         movie3 = await create_movie("Test2", year=2020)
 
-        res = await client.get(f"/movies/?sort_by=year&order=desc")
+        res = await client.get("/movies/?sort_by=year&order=desc")
         assert res.status_code == 200
         data = res.json()
         years = [movie["year"] for movie in data["movies"]]
         assert years == [movie3["year"], movie1["year"], movie2["year"]]
+
+    async def test_sort_movies_by_year_asc_returns_oldest_first(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", year=2010)
+        movie2 = await create_movie("Test", year=2000)
+        movie3 = await create_movie("Test2", year=2020)
+
+        res = await client.get("/movies/?sort_by=year&order=asc")
+        assert res.status_code == 200
+        data = res.json()
+        years = [movie["year"] for movie in data["movies"]]
+        assert years == [movie2["year"], movie1["year"], movie3["year"]]
+
+    async def test_sort_movies_by_votes_desc_returns_most_popular_first(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", votes=5000)
+        movie2 = await create_movie("Test", votes=500)
+        movie3 = await create_movie("Test2", votes=50000)
+
+        res = await client.get("/movies/?sort_by=votes&order=desc")
+        assert res.status_code == 200
+        data = res.json()
+        movies_id = [movie["id"] for movie in data["movies"]]
+        assert movies_id == [movie3["id"], movie1["id"], movie2["id"]]
 
 
 class TestSearchMovies:
