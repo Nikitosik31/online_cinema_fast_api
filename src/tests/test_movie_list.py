@@ -244,6 +244,19 @@ class TestSortMovies:
         movies_id = [movie["id"] for movie in data["movies"]]
         assert movies_id == [movie3["id"], movie1["id"], movie2["id"]]
 
+    async def test_sort_movies_by_price_asc_returns_cheapest_first(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", price=100)
+        movie2 = await create_movie("Test", price=300)
+        movie3 = await create_movie("Test2", price=200)
+
+        res = await client.get("/movies/?sort_by=price&order=asc")
+        assert res.status_code == 200
+        data = res.json()
+        movies_id = [movie["id"] for movie in data["movies"]]
+        assert movies_id == [movie1["id"], movie3["id"], movie2["id"]]
+
 
 class TestSearchMovies:
     pass

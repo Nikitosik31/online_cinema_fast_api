@@ -298,6 +298,7 @@ async def create_movie(client, moderator_user):
         genres=None,
         directors=None,
         stars=None,
+        price=None,
     ):
 
         if genres is None:
@@ -322,6 +323,7 @@ async def create_movie(client, moderator_user):
                 "genres": genres,
                 "directors": directors,
                 "stars": stars,
+                "price": price,
             },
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -338,6 +340,7 @@ async def create_movie(client, moderator_user):
             "genres": data["genres"],
             "directors": data["directors"],
             "stars": data["stars"],
+            "price": data["price"],
         }
 
     return _create
