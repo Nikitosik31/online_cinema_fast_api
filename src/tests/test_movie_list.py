@@ -268,9 +268,9 @@ class TestSortMovies:
     async def test_list_movies_pagination_links_keep_sort_params(
         self, client, create_movie
     ):
-        movie1 = await create_movie("Movie", year=2010)
-        movie2 = await create_movie("Test", year=2020)
-        movie3 = await create_movie("Test2", year=2000)
+        await create_movie("Movie", year=2010)
+        await create_movie("Test", year=2020)
+        await create_movie("Test2", year=2000)
 
         res = await client.get(
             f"/movies/?page=1&per_page=2&sort_by=year&order=desc"
@@ -284,4 +284,15 @@ class TestSortMovies:
 
 
 class TestSearchMovies:
-    pass
+    async def test_search_movies_by_title_returns_matching_movies(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie")
+        movie2 = await create_movie("Test")
+        movie3 = await create_movie("Test2")
+
+        res = await client.get("/movies/?search=MO")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["movies"][0]["name"] == movie1["name"]
+        assert data["total_items"] == 1

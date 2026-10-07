@@ -1,12 +1,18 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from database.database import get_postgresql_db
-from database.models.movies import MovieModel, GenreModel, movie_genres_model
+from database.models.movies import (
+    MovieModel,
+    GenreModel,
+    movie_genres_model,
+    StarModel,
+    DirectorModel,
+)
 from schemas.movies import (
     MovieDetailResponseSchema,
     GenreWithMovieCountResponseSchema,
@@ -63,6 +69,9 @@ async def get_movies_list(
         None, description="Field to sort by"
     ),
     order: Literal["asc", "desc"] = Query("asc", description="Sort direction"),
+    search: str | None = Query(
+        None, description="Search by name, star, description, director."
+    ),
 ):
 
     sort_columns = {
@@ -80,6 +89,17 @@ async def get_movies_list(
             )
         )
 
+    if search:
+        filters.append(
+            or_(
+                MovieModel.name.ilike(f"%{search}%"),
+                MovieModel.description.ilike(f"%{search}%"),
+                MovieModel.stars.any(StarModel.name.ilike(f"%{search}%")),
+                MovieModel.directors.any(
+                    DirectorModel.name.ilike(f"%{search}%")
+                ),
+            )
+        )
     if year is not None:
         filters.append(MovieModel.year == year)
 
