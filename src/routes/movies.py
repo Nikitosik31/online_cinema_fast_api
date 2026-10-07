@@ -53,25 +53,46 @@ async def get_movie_genres(
 
 @router.get(
     "/",
+    summary="List movies",
+    description=(
+        "Returns a paginated list of movies. Supports filtering by genre, "
+        "release year and minimum IMDb rating, text search and sorting. "
+        "Publicly accessible, no authentication required."
+    ),
     response_model=MovieListResponseSchema,
+    status_code=200,
 )
 async def get_movies_list(
     db: AsyncSession = Depends(get_postgresql_db),
     page: int = Query(1, ge=1, description="Page number (1-based index)"),
     per_page: int = Query(
-        10, ge=1, le=20, description="Number of items per page"
+        10, ge=1, le=20, description="Number of items per page (max 20)"
     ),
-    genre_id: list[int] | None = Query(None, description="Filter by genre id"),
-    year: int | None = Query(None, description="Filter by year"),
+    genre_id: list[int] | None = Query(
+        None,
+        description=(
+            "Filter by genre id. Repeat the parameter to match several genres "
+            "(e.g. genre_id=1&genre_id=2); a movie is returned if it has any of them"
+        ),
+    ),
+    year: int | None = Query(None, description="Filter by exact release year"),
     imdb_min: float | None = Query(
-        None, description="Filter by min imdb rating"
+        None, description="Minimum IMDb rating (inclusive)"
+    ),
+    search: str | None = Query(
+        None,
+        description=(
+            "Case-insensitive search by title, description, "
+            "actor name or director name"
+        ),
     ),
     sort_by: Literal["price", "year", "votes"] | None = Query(
-        None, description="Field to sort by"
+        None,
+        description="Field to sort by (price, release year or popularity by votes). "
+        "Without it movies are ordered by id",
     ),
-    order: Literal["asc", "desc"] = Query("asc", description="Sort direction"),
-    search: str | None = Query(
-        None, description="Search by name, star, description, director."
+    order: Literal["asc", "desc"] = Query(
+        "asc", description="Sort direction; used together with sort_by"
     ),
 ):
 
@@ -150,19 +171,21 @@ async def get_movies_list(
     genre_query = "".join(f"&genre_id={genr_id}" for genr_id in genre_id or [])
     year_query = f"&year={year}" if year is not None else ""
     imdb_query = f"&imdb_min={imdb_min}" if imdb_min is not None else ""
+
+    extra_query = (
+        f"{per_page}{genre_query}{year_query}"
+        f"{imdb_query}{search_query}{sort_by_query}"
+    )
+
     return MovieListResponseSchema(
         movies=movie_list,
         prev_page=(
-            f"/movies/?page={prev_page_number}&per_page="
-            f"{per_page}{genre_query}{year_query}"
-            f"{imdb_query}{search_query}{sort_by_query}"
+            f"/movies/?page={prev_page_number}&per_page={extra_query}"
             if prev_page_number >= 1
             else None
         ),
         next_page=(
-            f"/movies/?page={page + 1}&per_page="
-            f"{per_page}{genre_query}{year_query}"
-            f"{imdb_query}{search_query}{sort_by_query}"
+            f"/movies/?page={page + 1}&per_page={extra_query}"
             if page < total_pages
             else None
         ),
