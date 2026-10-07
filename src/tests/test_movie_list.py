@@ -173,6 +173,21 @@ class TestFilterMovies:
         )
         assert data["total_items"] == 3
 
+    async def test_filter_movies_by_year_returns_only_movies_of_that_year(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", year=2020)
+        movie2 = await create_movie("Test", year=2020)
+        await create_movie("Test2", year=2011)
+
+        res = await client.get(f"/movies/?year={movie1['year']}")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["movies"]) == 2
+        ids = {movie["id"] for movie in data["movies"]}
+        assert ids == {movie1["id"], movie2["id"]}
+        assert data["total_items"] == 2
+
 
 class TestSortMovies:
     pass
