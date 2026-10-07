@@ -307,6 +307,7 @@ class TestSearchMovies:
         data = res.json()
         ids = [movie["id"] for movie in data["movies"]]
         assert ids == [movie1["id"]]
+        assert data["total_items"] == 1
 
     async def test_search_movies_by_director_name_returns_matching_movies(
         self, client, create_movie
@@ -328,6 +329,33 @@ class TestSearchMovies:
         )
         await create_movie("Test", description="TututuTTTYU")
         res = await client.get("/movies/?search=lal")
+        assert res.status_code == 200
+        data = res.json()
+        ids = [movie["id"] for movie in data["movies"]]
+        assert ids == [movie1["id"]]
+        assert data["total_items"] == 1
+
+    async def test_search_movies_with_no_matches_returns_empty_list(
+        self, client, create_movie
+    ):
+        await create_movie("Movie")
+        res = await client.get("/movies/?search=zzzzz")
+        assert res.status_code == 200
+        data = res.json()
+        ids = [movie["id"] for movie in data["movies"]]
+        assert ids == []
+        assert data["total_items"] == 0
+
+    async def test_search_movies_matching_several_fields_returns_movie_once(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie(
+            "Movie",
+            stars=["MoShehi"],
+            directors=["Monstr"],
+            description="Monday",
+        )
+        res = await client.get("/movies/?search=mo")
         assert res.status_code == 200
         data = res.json()
         ids = [movie["id"] for movie in data["movies"]]
