@@ -307,3 +307,29 @@ class TestSearchMovies:
         data = res.json()
         ids = [movie["id"] for movie in data["movies"]]
         assert ids == [movie1["id"]]
+
+    async def test_search_movies_by_director_name_returns_matching_movies(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie("Movie", directors=["Steven Spielberg"])
+        await create_movie("Test", directors=["Quentin Tarantino"])
+        res = await client.get("/movies/?search=Spi")
+        assert res.status_code == 200
+        data = res.json()
+        ids = [movie["id"] for movie in data["movies"]]
+        assert ids == [movie1["id"]]
+        assert data["total_items"] == 1
+
+    async def test_search_movies_by_descriptions_returns_matching_movies(
+        self, client, create_movie
+    ):
+        movie1 = await create_movie(
+            "Movie", description="LAlalalal lala,slcla m"
+        )
+        await create_movie("Test", description="TututuTTTYU")
+        res = await client.get("/movies/?search=lal")
+        assert res.status_code == 200
+        data = res.json()
+        ids = [movie["id"] for movie in data["movies"]]
+        assert ids == [movie1["id"]]
+        assert data["total_items"] == 1
