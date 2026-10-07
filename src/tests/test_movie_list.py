@@ -188,6 +188,21 @@ class TestFilterMovies:
         assert ids == {movie1["id"], movie2["id"]}
         assert data["total_items"] == 2
 
+    async def test_filter_movies_by_imdb_min_returns_movies_with_rating_at_least_that(
+        self, client, create_movie
+    ):
+        await create_movie("Movie", imdb=7.5)
+        movie1 = await create_movie("Test", imdb=8.0)
+        movie2 = await create_movie("Test2", imdb=9.0)
+
+        res = await client.get(f"/movies/?imdb_min={movie1['imdb']}")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["movies"]) == 2
+        ids = {movie["id"] for movie in data["movies"]}
+        assert ids == {movie1["id"], movie2["id"]}
+        assert data["total_items"] == 2
+
 
 class TestSortMovies:
     pass

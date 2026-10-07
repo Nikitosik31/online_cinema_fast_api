@@ -54,6 +54,9 @@ async def get_movies_list(
     ),
     genre_id: list[int] | None = Query(None, description="Filter by genre id"),
     year: int | None = Query(None, description="Filter by year"),
+    imdb_min: float | None = Query(
+        None, description="Filter by min imdb rating"
+    ),
 ):
     offset = (page - 1) * per_page
     filters = []
@@ -66,6 +69,9 @@ async def get_movies_list(
 
     if year is not None:
         filters.append(MovieModel.year == year)
+
+    if imdb_min is not None:
+        filters.append(MovieModel.imdb >= imdb_min)
 
     count_stmt = select(func.count(MovieModel.id)).where(*filters)
     result_count = await db.execute(count_stmt)
@@ -94,16 +100,16 @@ async def get_movies_list(
 
     genre_query = "".join(f"&genre_id={genr_id}" for genr_id in genre_id or [])
     year_query = f"&year={year}" if year is not None else ""
-
+    imdb_query = f"&imdb_min={imdb_min}" if imdb_min is not None else ""
     return MovieListResponseSchema(
         movies=movie_list,
         prev_page=(
-            f"/movies/?page={prev_page_number}&per_page={per_page}{genre_query}{year_query}"
+            f"/movies/?page={prev_page_number}&per_page={per_page}{genre_query}{year_query}{imdb_query}"
             if prev_page_number >= 1
             else None
         ),
         next_page=(
-            f"/movies/?page={page + 1}&per_page={per_page}{genre_query}{year_query}"
+            f"/movies/?page={page + 1}&per_page={per_page}{genre_query}{year_query}{imdb_query}"
             if page < total_pages
             else None
         ),
