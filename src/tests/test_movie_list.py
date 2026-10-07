@@ -141,6 +141,19 @@ class TestFilterMovies:
         assert ids == {movie1["id"], movie2["id"]}
         assert data["total_items"] == 2
 
+    async def test_filter_movies_with_both_requested_genres_returns_movie_once(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Test", genres=["Comedy", "Drama"])
+        await create_movie("Test2", genres=["Horror"])
+        res = await client.get(
+            f"/movies/?genre_id={movie['genres'][0]['id']}&genre_id={movie['genres'][1]['id']}"
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["movies"]) == 1
+        assert data["total_items"] == 1
+
 
 class TestSortMovies:
     pass
