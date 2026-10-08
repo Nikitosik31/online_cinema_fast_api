@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from database.models.accounts import UserModel, UserGroupEnum, UserGroupModel
-from conftest import test_AsyncPostgresqlSessionLocal
+from tests.conftest import test_AsyncPostgresqlSessionLocal
 
 
 async def test_admin_activate_user_success(client, admin_user):

@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta
 
-from conftest import test_AsyncPostgresqlSessionLocal
+from tests.conftest import test_AsyncPostgresqlSessionLocal
 from sqlalchemy import select
 from database.models.accounts import (
     ActivationTokenModel,
