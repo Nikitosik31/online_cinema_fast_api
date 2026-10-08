@@ -125,3 +125,38 @@ async def remove_movie_rating(
     await db.commit()
 
     return
+
+
+@router.get(
+    "/{movie_id}/rating/",
+    summary="Get my rating of a movie",
+    description=(
+        "Returns the current user's rating for the movie. "
+        "Authentication required."
+    ),
+    response_model=MovieRatingResponseSchema,
+    status_code=200,
+    responses={
+        404: {
+            "description": "The user has not rated this movie",
+            "content": {
+                "application/json": {"example": {"detail": "Rating not found"}}
+            },
+        },
+    },
+)
+async def get_movie_rating(
+    movie_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    rating_movie = await db.scalar(
+        select(MovieRating).where(
+            MovieRating.movie_id == movie_id,
+            MovieRating.user_id == current_user.id,
+        )
+    )
+    if not rating_movie:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    return MovieRatingResponseSchema.model_validate(rating_movie)

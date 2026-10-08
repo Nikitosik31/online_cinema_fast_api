@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from database.models.interactions import FavoriteMovie, MovieRating
-from tests.conftest import test_AsyncPostgresqlSessionLocal
+from tests.conftest import test_AsyncPostgresqlSessionLocal, moderator_user
 
 
 class TestSetRating:
@@ -252,3 +252,79 @@ class TestRemoveRating:
 
         assert len(exist_movie) == 1
         assert len(del_movie) == 0
+
+
+class TestGetMyRating:
+    async def test_get_my_rating_returns_200(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        put_res = await client.put(
+            f"/movies/{movie["id"]}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert put_res.status_code == 200
+        res = await client.get(
+            f"/movies/{movie['id']}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["rating"] == 5
+        assert data["movie_id"] == movie["id"]
+
+    async def test_get_my_rating_not_rated_returns_404(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.get(
+            f"/movies/{movie["id"]}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_get_my_rating_without_token_returns_401(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Movie")
+        res = await client.get(
+            f"/movies/{movie['id']}/rating/",
+        )
+        assert res.status_code == 401
+
+    async def test_get_my_rating_does_not_return_other_users_rating(
+        self, client, create_movie, active_user_with_token, moderator_user
+    ):
+        movie = await create_movie("Movie")
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 10},
+            headers={
+                "Authorization": f"Bearer {moderator_user["access_token"]}"
+            },
+        )
+
+        res = await client.get(
+            f"/movies/{movie['id']}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["rating"] == 5
+        assert data["movie_id"] == movie["id"]
