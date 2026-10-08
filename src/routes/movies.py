@@ -198,7 +198,13 @@ async def get_movies_list(
 @router.get(
     "/{movie_id}/",
     summary="Get movie details",
-    description="Retrieve full details of a single movie by its ID. Publicly accessible, no authentication required.",
+    description=(
+        "Retrieve full details of a single movie by its ID, including its "
+        "genres, directors, stars, certification and the average user rating "
+        "(`average_rating`, rounded to one decimal place; `null` if nobody "
+        "has rated the movie yet). Publicly accessible, no authentication "
+        "required."
+    ),
     response_model=MovieDetailResponseSchema,
     status_code=200,
     responses={
