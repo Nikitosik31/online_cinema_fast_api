@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
 from database.models.interactions import FavoriteMovie
 from database.models.movies import MovieModel
 from schemas.accounts import MessageResponseSchema
+from schemas.movies import MovieListResponseSchema, MovieListItemResponseSchema
 from security.dependencies import get_current_user
 
 router = APIRouter(
@@ -126,3 +128,69 @@ async def remove_movie_from_favorite(
     await db.commit()
 
     return
+
+
+@router.get(
+    "/favorites/",
+    summary="List my favorite movies",
+    description=(
+        "Returns a paginated list of the current user's favorite movies, "
+        "most recently added first. Authentication required."
+    ),
+    response_model=MovieListResponseSchema,
+    status_code=200,
+)
+async def favorite_movies(
+    page: int = Query(1, ge=1, description="Page number (1-based index)"),
+    per_page: int = Query(
+        10, ge=1, le=20, description="Number of items per page (max 20)"
+    ),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    offset = (page - 1) * per_page
+    count_stmt = (
+        select(func.count())
+        .select_from(FavoriteMovie)
+        .where(FavoriteMovie.user_id == current_user.id)
+    )
+    result_count = await db.execute(count_stmt)
+    total_items = result_count.scalar() or 0
+
+    stmt = (
+        select(MovieModel)
+        .join(FavoriteMovie, FavoriteMovie.movie_id == MovieModel.id)
+        .where(FavoriteMovie.user_id == current_user.id)
+        .options(selectinload(MovieModel.genres))
+        .order_by(FavoriteMovie.created_at.desc(), FavoriteMovie.id.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+
+    result = await db.execute(stmt)
+    db_movies = result.scalars().all() or []
+
+    movie_list = [
+        MovieListItemResponseSchema.model_validate(movie)
+        for movie in db_movies
+    ]
+
+    total_pages = (total_items + per_page - 1) // per_page
+
+    prev_page_number = min(page - 1, total_pages)
+
+    return MovieListResponseSchema(
+        movies=movie_list,
+        prev_page=(
+            f"/movies/favorites/?page={prev_page_number}&per_page={per_page}"
+            if prev_page_number >= 1
+            else None
+        ),
+        next_page=(
+            f"/movies/favorites/?page={page + 1}&per_page={per_page}"
+            if page < total_pages
+            else None
+        ),
+        total_pages=total_pages,
+        total_items=total_items,
+    )
