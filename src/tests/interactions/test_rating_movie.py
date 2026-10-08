@@ -140,3 +140,115 @@ class TestSetRating:
             movies = result.all()
 
         assert len(movies) == 2
+
+
+class TestRemoveRating:
+    async def test_remove_rating_returns_204(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.put(
+            f"/movies/{movie["id"]}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert res.status_code == 200
+
+        del_res = await client.delete(
+            f"/movies/{movie["id"]}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert del_res.status_code == 204
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(MovieRating).where(
+                    MovieRating.movie_id == movie["id"],
+                    MovieRating.user_id == active_user_with_token["id"],
+                )
+            )
+            movies = result.all()
+
+        assert len(movies) == 0
+
+    async def test_remove_rating_not_rated_returns_404(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        del_res = await client.delete(
+            f"/movies/{movie["id"]}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert del_res.status_code == 404
+
+    async def test_remove_rating_movie_not_found_returns_404(
+        self, client, active_user_with_token
+    ):
+        del_res = await client.delete(
+            f"/movies/999999/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert del_res.status_code == 404
+
+    async def test_remove_rating_without_token_returns_401(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Movie")
+        del_res = await client.delete(
+            f"/movies/{movie["id"]}/rating/",
+        )
+        assert del_res.status_code == 401
+
+    async def test_remove_rating_does_not_touch_other_users(
+        self, client, create_movie, active_user_with_token, moderator_user
+    ):
+        movie = await create_movie("Movie")
+        await client.put(
+            f"/movies/{movie["id"]}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {moderator_user["access_token"]}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie["id"]}/rating/",
+            json={"rating": 10},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        del_res = await client.delete(
+            f"/movies/{movie["id"]}/rating/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        assert del_res.status_code == 204
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(MovieRating).where(
+                    MovieRating.movie_id == movie["id"],
+                    MovieRating.user_id == active_user_with_token["id"],
+                )
+            )
+            del_movie = result.all()
+
+            result_other = await db.scalars(
+                select(MovieRating).where(
+                    MovieRating.movie_id == movie["id"],
+                    MovieRating.user_id == moderator_user["id"],
+                )
+            )
+            exist_movie = result_other.all()
+
+        assert len(exist_movie) == 1
+        assert len(del_movie) == 0
