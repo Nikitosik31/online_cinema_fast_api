@@ -85,3 +85,44 @@ async def add_movie_to_favorite(
     await db.refresh(movie_favorite)
 
     return MessageResponseSchema(message="Movie added to favorites")
+
+
+@router.delete(
+    "/{movie_id}/favorite/",
+    summary="Remove movie from favorites",
+    description=(
+        "Removes the movie from the current user's favorites. "
+        "Authentication required."
+    ),
+    status_code=204,
+    responses={
+        404: {
+            "description": "Movie is not in the user's favorites",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Movie is not in favorites"}
+                }
+            },
+        },
+    },
+)
+async def remove_movie_from_favorite(
+    movie_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_movie_in_favorite = await db.scalar(
+        select(FavoriteMovie).where(
+            FavoriteMovie.movie_id == movie_id,
+            FavoriteMovie.user_id == current_user.id,
+        )
+    )
+    if not db_movie_in_favorite:
+        raise HTTPException(
+            status_code=404, detail="Movie is not in favorites"
+        )
+
+    await db.delete(db_movie_in_favorite)
+    await db.commit()
+
+    return
