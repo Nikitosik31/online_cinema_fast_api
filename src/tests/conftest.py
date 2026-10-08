@@ -102,6 +102,25 @@ async def active_user(client):
     return {"email": email, "password": password, "id": user_id}
 
 
+@pytest.fixture
+async def active_user_with_token(client, active_user):
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    access_token = login_res.json()["access_token"]
+
+    return {
+        "email": active_user["email"],
+        "password": active_user["password"],
+        "id": active_user["id"],
+        "access_token": access_token,
+    }
+
+
 @pytest.fixture(autouse=True)
 async def clean_tables():
     yield
