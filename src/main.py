@@ -5,6 +5,7 @@ from routes import (
     movies_router,
     moderator_movies_router,
     favorites_movie_router,
+    ratings_movie_router,
 )
 
 app = FastAPI()
@@ -12,5 +13,6 @@ app = FastAPI()
 app.include_router(accounts_router)
 app.include_router(admin_router)
 app.include_router(moderator_movies_router)
-app.include_router(movies_router)
 app.include_router(favorites_movie_router)
+app.include_router(movies_router)
+app.include_router(ratings_movie_router)

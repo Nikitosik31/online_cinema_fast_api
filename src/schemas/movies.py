@@ -1,4 +1,5 @@
 import decimal
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -117,5 +118,17 @@ class GenreWithMovieCountResponseSchema(BaseModel):
     id: int
     name: str
     movie_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovieRatingRequestSchema(BaseModel):
+    rating: int = Field(ge=1, le=10)
+
+
+class MovieRatingResponseSchema(BaseModel):
+    movie_id: int
+    rating: int
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
