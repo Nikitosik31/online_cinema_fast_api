@@ -94,6 +94,7 @@ class MovieDetailResponseSchema(BaseModel):
     genres: list[GenreResponseSchema]
     directors: list[DirectorResponseSchema]
     stars: list[StarResponseSchema]
+    average_rating: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

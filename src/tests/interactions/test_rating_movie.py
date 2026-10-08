@@ -328,3 +328,136 @@ class TestGetMyRating:
         data = res.json()
         assert data["rating"] == 5
         assert data["movie_id"] == movie["id"]
+
+
+class TestMovieAverageRating:
+    async def test_movie_details_without_ratings_has_null_average(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Movie")
+        res = await client.get(
+            f"/movies/{movie['id']}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["average_rating"] is None
+
+    async def test_movie_details_returns_average_rating(
+        self, client, create_movie, active_user_with_token, moderator_user
+    ):
+        movie = await create_movie("Movie")
+        put_res_1 = await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        put_res_2 = await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 10},
+            headers={
+                "Authorization": f"Bearer {moderator_user["access_token"]}"
+            },
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["average_rating"] == 7.5
+
+    async def test_movie_details_average_rating_is_rounded(
+        self,
+        client,
+        create_movie,
+        active_user_with_token,
+        moderator_user,
+        admin_user,
+    ):
+        login_res = await client.post(
+            "/login/",
+            json={
+                "email": admin_user["email"],
+                "password": admin_user["password"],
+            },
+        )
+        access_token = login_res.json()["access_token"]
+        movie = await create_movie("Movie")
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 7},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 8},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 8},
+            headers={
+                "Authorization": f"Bearer {moderator_user["access_token"]}"
+            },
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["average_rating"] == 7.7
+
+    async def test_movie_details_average_rating_ignores_other_movies(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie1 = await create_movie("Movie")
+        movie2 = await create_movie("Movie2")
+
+        await client.put(
+            f"/movies/{movie1['id']}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie2['id']}/rating/",
+            json={"rating": 10},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        res = await client.get(
+            f"/movies/{movie1['id']}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["average_rating"] == 5.0
+
+    async def test_movie_details_average_rating_updates_when_rating_changes(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 5},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie['id']}/rating/",
+            json={"rating": 10},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token["access_token"]}"
+            },
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["average_rating"] == 10.0

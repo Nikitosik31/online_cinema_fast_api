@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from database.database import get_postgresql_db
+from database.models.interactions import MovieRating
 from database.models.movies import (
     MovieModel,
     GenreModel,
@@ -230,10 +231,17 @@ async def get_movie_details(
     )
 
     db_movie = await db.scalar(stmt)
-
+    result = await db.scalar(
+        select(func.avg(MovieRating.rating)).where(
+            MovieRating.movie_id == movie_id
+        )
+    )
+    avg_rating = round(float(result), 1) if result is not None else None
     if not db_movie:
         raise HTTPException(
             status_code=404, detail="Movie with this id does not exist"
         )
 
-    return MovieDetailResponseSchema.model_validate(db_movie)
+    return MovieDetailResponseSchema.model_validate(db_movie).model_copy(
+        update={"average_rating": avg_rating}
+    )
