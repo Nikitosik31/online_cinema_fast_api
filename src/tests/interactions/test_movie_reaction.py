@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from database.models.interactions import MovieReaction
-from tests.conftest import test_AsyncPostgresqlSessionLocal
+from tests.conftest import test_AsyncPostgresqlSessionLocal, admin_user
 
 
 class TestSetReaction:
@@ -247,3 +247,118 @@ class TestRemoveReaction:
 
         assert reaction is None
         assert other_reaction is not None
+
+
+class TestMovieReactionCounts:
+    async def test_movie_details_without_reactions_has_zero_counts(
+        self, client, create_movie
+    ):
+        movie = await create_movie("Movie")
+        res = await client.get(
+            f"/movies/{movie["id"]}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["likes_count"] == 0
+        assert data["dislikes_count"] == 0
+
+    async def test_movie_details_returns_likes_and_dislikes_counts(
+        self,
+        client,
+        create_movie,
+        active_user_with_token,
+        moderator_user,
+        admin_user,
+    ):
+        login_res = await client.post(
+            "/login/",
+            json={
+                "email": admin_user["email"],
+                "password": admin_user["password"],
+            },
+        )
+        access_token = login_res.json()["access_token"]
+        movie = await create_movie("Movie")
+
+        await client.put(
+            f"/movies/{movie["id"]}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie["id"]}/reaction/",
+            json={"reaction_type": "dislike"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie["id"]}/reaction/",
+            json={"reaction_type": "like"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        res = await client.get(
+            f"/movies/{movie["id"]}/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["likes_count"] == 2
+        assert data["dislikes_count"] == 1
+
+    async def test_movie_details_reaction_counts_ignore_other_movies(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie1 = await create_movie("Movie")
+        movie2 = await create_movie("Movie2")
+
+        await client.put(
+            f"/movies/{movie1["id"]}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        await client.put(
+            f"/movies/{movie2["id"]}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        res = await client.get(f"/movies/{movie1["id"]}/")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["likes_count"] == 1
+        assert data["dislikes_count"] == 0
+
+    async def test_movie_details_reaction_counts_update_when_reaction_changes(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        await client.put(
+            f"/movies/{movie["id"]}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        res = await client.get(f"/movies/{movie["id"]}/")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["likes_count"] == 1
+        assert data["dislikes_count"] == 0
+
+        await client.put(
+            f"/movies/{movie["id"]}/reaction/",
+            json={"reaction_type": "dislike"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        res = await client.get(f"/movies/{movie["id"]}/")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["likes_count"] == 0
+        assert data["dislikes_count"] == 1

@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from database.database import get_postgresql_db
-from database.models.interactions import MovieRating
+from database.models.interactions import (
+    MovieRating,
+    MovieReaction,
+    ReactionTypeEnum,
+)
 from database.models.movies import (
     MovieModel,
     GenreModel,
@@ -243,11 +247,25 @@ async def get_movie_details(
         )
     )
     avg_rating = round(float(result), 1) if result is not None else None
+
+    counts_result = await db.execute(
+        select(MovieReaction.reaction_type, func.count())
+        .where(MovieReaction.movie_id == movie_id)
+        .group_by(MovieReaction.reaction_type)
+    )
+    counts = dict(counts_result.all())
+    likes_count = counts.get(ReactionTypeEnum.LIKE, 0)
+    dislikes_count = counts.get(ReactionTypeEnum.DISLIKE, 0)
+
     if not db_movie:
         raise HTTPException(
             status_code=404, detail="Movie with this id does not exist"
         )
 
     return MovieDetailResponseSchema.model_validate(db_movie).model_copy(
-        update={"average_rating": avg_rating}
+        update={
+            "average_rating": avg_rating,
+            "likes_count": likes_count,
+            "dislikes_count": dislikes_count,
+        }
     )
