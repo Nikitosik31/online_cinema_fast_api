@@ -90,3 +90,43 @@ async def put_reaction_movie(
         raise HTTPException(status_code=400, detail="Invalid input data.")
 
     return MovieReactionResponseSchema.model_validate(reaction_movie)
+
+
+@router.delete(
+    "/{movie_id}/reaction/",
+    summary="Remove my reaction to a movie",
+    description=(
+        "Removes the current user's like or dislike for the movie. "
+        "Authentication required."
+    ),
+    status_code=204,
+    responses={
+        404: {
+            "description": "The user has not reacted to this movie",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Reaction not found"}
+                }
+            },
+        },
+    },
+)
+async def delete_reaction_movie(
+    movie_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    reaction_movie = await db.scalar(
+        select(MovieReaction).where(
+            MovieReaction.movie_id == movie_id,
+            MovieReaction.user_id == current_user.id,
+        )
+    )
+
+    if not reaction_movie:
+        raise HTTPException(status_code=404, detail="Reaction not found")
+
+    await db.delete(reaction_movie)
+    await db.commit()
+
+    return
