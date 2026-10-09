@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from database.models.interactions import ReactionTypeEnum
+
 
 class NamedEntityRequestSchema(BaseModel):
     name: str = Field(max_length=100)
@@ -131,5 +133,18 @@ class MovieRatingResponseSchema(BaseModel):
     movie_id: int
     rating: int
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovieReactionRequestSchema(BaseModel):
+    reaction_type: ReactionTypeEnum
+
+
+class MovieReactionResponseSchema(BaseModel):
+    id: int
+    movie_id: int
+    reaction_type: ReactionTypeEnum
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
