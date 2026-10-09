@@ -12,7 +12,7 @@ class ReactionTypeEnum(StrEnum):
     DISLIKE = "dislike"
 
 
-class FavoriteMovie(Base):
+class FavoriteMovieModel(Base):
     __tablename__ = "favorite_movies"
     __table_args__ = (
         UniqueConstraint("user_id", "movie_id", name="unique_favorite_movies"),
@@ -28,7 +28,7 @@ class FavoriteMovie(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
 
-class MovieRating(Base):
+class MovieRatingModel(Base):
     __tablename__ = "movie_ratings"
     __table_args__ = (
         UniqueConstraint("user_id", "movie_id", name="unique_movie_ratings"),
@@ -50,7 +50,7 @@ class MovieRating(Base):
     )
 
 
-class MovieReaction(Base):
+class MovieReactionModel(Base):
     __tablename__ = "movie_reactions"
     __table_args__ = (
         UniqueConstraint("user_id", "movie_id", name="unique_movie_reactions"),

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
-from database.models.interactions import MovieRating
+from database.models.interactions import MovieRatingModel
 from database.models.movies import MovieModel
 from schemas.movies import MovieRatingResponseSchema, MovieRatingRequestSchema
 from security.dependencies import get_current_user
@@ -64,9 +64,9 @@ async def set_movie_rating(
         )
 
     rating_movie = await db.scalar(
-        select(MovieRating).where(
-            MovieRating.movie_id == movie_id,
-            MovieRating.user_id == current_user.id,
+        select(MovieRatingModel).where(
+            MovieRatingModel.movie_id == movie_id,
+            MovieRatingModel.user_id == current_user.id,
         ),
     )
     try:
@@ -74,7 +74,7 @@ async def set_movie_rating(
             rating_movie.rating = rating_data.rating
 
         else:
-            rating_movie = MovieRating(
+            rating_movie = MovieRatingModel(
                 movie_id=movie_id,
                 rating=rating_data.rating,
                 user_id=current_user.id,
@@ -113,9 +113,9 @@ async def remove_movie_rating(
     db: AsyncSession = Depends(get_postgresql_db),
 ):
     rating_movie = await db.scalar(
-        select(MovieRating).where(
-            MovieRating.movie_id == movie_id,
-            MovieRating.user_id == current_user.id,
+        select(MovieRatingModel).where(
+            MovieRatingModel.movie_id == movie_id,
+            MovieRatingModel.user_id == current_user.id,
         )
     )
     if not rating_movie:
@@ -151,9 +151,9 @@ async def get_movie_rating(
     db: AsyncSession = Depends(get_postgresql_db),
 ):
     rating_movie = await db.scalar(
-        select(MovieRating).where(
-            MovieRating.movie_id == movie_id,
-            MovieRating.user_id == current_user.id,
+        select(MovieRatingModel).where(
+            MovieRatingModel.movie_id == movie_id,
+            MovieRatingModel.user_id == current_user.id,
         )
     )
     if not rating_movie:

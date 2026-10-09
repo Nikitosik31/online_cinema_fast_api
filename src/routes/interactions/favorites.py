@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
-from database.models.interactions import FavoriteMovie
+from database.models.interactions import FavoriteMovieModel
 from database.models.movies import MovieModel
 from schemas.accounts import MessageResponseSchema
 from schemas.movies import MovieListResponseSchema, MovieListItemResponseSchema
@@ -68,9 +68,9 @@ async def add_movie_to_favorite(
         )
 
     db_movie_favorite = await db.scalar(
-        select(FavoriteMovie).where(
-            FavoriteMovie.movie_id == movie_id,
-            FavoriteMovie.user_id == current_user.id,
+        select(FavoriteMovieModel).where(
+            FavoriteMovieModel.movie_id == movie_id,
+            FavoriteMovieModel.user_id == current_user.id,
         )
     )
     if db_movie_favorite:
@@ -78,7 +78,7 @@ async def add_movie_to_favorite(
             status_code=409, detail="Movie is already in favorites"
         )
 
-    movie_favorite = FavoriteMovie(
+    movie_favorite = FavoriteMovieModel(
         movie_id=movie_id,
         user_id=current_user.id,
     )
@@ -114,9 +114,9 @@ async def remove_movie_from_favorite(
     db: AsyncSession = Depends(get_postgresql_db),
 ):
     db_movie_in_favorite = await db.scalar(
-        select(FavoriteMovie).where(
-            FavoriteMovie.movie_id == movie_id,
-            FavoriteMovie.user_id == current_user.id,
+        select(FavoriteMovieModel).where(
+            FavoriteMovieModel.movie_id == movie_id,
+            FavoriteMovieModel.user_id == current_user.id,
         )
     )
     if not db_movie_in_favorite:
@@ -151,18 +151,20 @@ async def favorite_movies(
     offset = (page - 1) * per_page
     count_stmt = (
         select(func.count())
-        .select_from(FavoriteMovie)
-        .where(FavoriteMovie.user_id == current_user.id)
+        .select_from(FavoriteMovieModel)
+        .where(FavoriteMovieModel.user_id == current_user.id)
     )
     result_count = await db.execute(count_stmt)
     total_items = result_count.scalar() or 0
 
     stmt = (
         select(MovieModel)
-        .join(FavoriteMovie, FavoriteMovie.movie_id == MovieModel.id)
-        .where(FavoriteMovie.user_id == current_user.id)
+        .join(FavoriteMovieModel, FavoriteMovieModel.movie_id == MovieModel.id)
+        .where(FavoriteMovieModel.user_id == current_user.id)
         .options(selectinload(MovieModel.genres))
-        .order_by(FavoriteMovie.created_at.desc(), FavoriteMovie.id.desc())
+        .order_by(
+            FavoriteMovieModel.created_at.desc(), FavoriteMovieModel.id.desc()
+        )
         .offset(offset)
         .limit(per_page)
     )

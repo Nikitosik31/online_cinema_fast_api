@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from database.models.interactions import FavoriteMovie, MovieRating
+from database.models.interactions import FavoriteMovieModel, MovieRatingModel
 from tests.conftest import test_AsyncPostgresqlSessionLocal, moderator_user
 
 
@@ -19,9 +19,9 @@ class TestSetRating:
         assert res.status_code == 200
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == active_user_with_token["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == active_user_with_token["id"],
                 )
             )
             movies = result.all()
@@ -54,9 +54,9 @@ class TestSetRating:
         assert data["movie_id"] == movie["id"]
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == active_user_with_token["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == active_user_with_token["id"],
                 )
             )
             movies = result.all()
@@ -77,9 +77,9 @@ class TestSetRating:
         assert res.status_code == 422
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == active_user_with_token["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == active_user_with_token["id"],
                 )
             )
             favorite_movie = result.all()
@@ -133,8 +133,8 @@ class TestSetRating:
         assert res_2.json()["rating"] == 10
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
                 )
             )
             movies = result.all()
@@ -166,9 +166,9 @@ class TestRemoveRating:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == active_user_with_token["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == active_user_with_token["id"],
                 )
             )
             movies = result.all()
@@ -235,17 +235,17 @@ class TestRemoveRating:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == active_user_with_token["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == active_user_with_token["id"],
                 )
             )
             del_movie = result.all()
 
             result_other = await db.scalars(
-                select(MovieRating).where(
-                    MovieRating.movie_id == movie["id"],
-                    MovieRating.user_id == moderator_user["id"],
+                select(MovieRatingModel).where(
+                    MovieRatingModel.movie_id == movie["id"],
+                    MovieRatingModel.user_id == moderator_user["id"],
                 )
             )
             exist_movie = result_other.all()

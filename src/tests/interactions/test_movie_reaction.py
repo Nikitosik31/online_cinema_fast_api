@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from database.models.interactions import MovieReaction
+from database.models.interactions import MovieReactionModel
 from tests.conftest import test_AsyncPostgresqlSessionLocal, admin_user
 
 
@@ -20,8 +20,8 @@ class TestSetReaction:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"]
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"]
                 )
             )
             reactions = result.all()
@@ -53,8 +53,8 @@ class TestSetReaction:
         assert res.status_code == 200
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"]
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"]
                 )
             )
             reactions = result.all()
@@ -121,15 +121,15 @@ class TestSetReaction:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             user_reaction = await db.scalar(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"],
-                    MovieReaction.user_id == active_user_with_token["id"],
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"],
+                    MovieReactionModel.user_id == active_user_with_token["id"],
                 )
             )
             other_reaction = await db.scalar(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"],
-                    MovieReaction.user_id == moderator_user["id"],
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"],
+                    MovieReactionModel.user_id == moderator_user["id"],
                 )
             )
 
@@ -161,8 +161,8 @@ class TestRemoveReaction:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"],
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"],
                 )
             )
             reactions = result.all()
@@ -233,15 +233,15 @@ class TestRemoveReaction:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             reaction = await db.scalar(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"],
-                    MovieReaction.user_id == moderator_user["id"],
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"],
+                    MovieReactionModel.user_id == moderator_user["id"],
                 )
             )
             other_reaction = await db.scalar(
-                select(MovieReaction).where(
-                    MovieReaction.movie_id == movie["id"],
-                    MovieReaction.user_id == active_user_with_token["id"],
+                select(MovieReactionModel).where(
+                    MovieReactionModel.movie_id == movie["id"],
+                    MovieReactionModel.user_id == active_user_with_token["id"],
                 )
             )
 

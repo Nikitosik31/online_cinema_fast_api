@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from database.models.interactions import FavoriteMovie
+from database.models.interactions import FavoriteMovieModel
 from tests.conftest import test_AsyncPostgresqlSessionLocal
 
 
@@ -21,9 +21,9 @@ class TestAddFavorite:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             favorite = await db.scalar(
-                select(FavoriteMovie).where(
-                    FavoriteMovie.movie_id == movie["id"],
-                    FavoriteMovie.user_id == active_user_with_token["id"],
+                select(FavoriteMovieModel).where(
+                    FavoriteMovieModel.movie_id == movie["id"],
+                    FavoriteMovieModel.user_id == active_user_with_token["id"],
                 )
             )
         assert favorite is not None
@@ -61,9 +61,9 @@ class TestAddFavorite:
 
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(FavoriteMovie).where(
-                    FavoriteMovie.movie_id == movie["id"],
-                    FavoriteMovie.user_id == active_user_with_token["id"],
+                select(FavoriteMovieModel).where(
+                    FavoriteMovieModel.movie_id == movie["id"],
+                    FavoriteMovieModel.user_id == active_user_with_token["id"],
                 )
             )
             favorites = result.all()
@@ -101,9 +101,9 @@ class TestRemoveFavorite:
         assert res.status_code == 204
         async with test_AsyncPostgresqlSessionLocal() as db:
             favorite = await db.scalar(
-                select(FavoriteMovie).where(
-                    FavoriteMovie.movie_id == movie["id"],
-                    FavoriteMovie.user_id == active_user_with_token["id"],
+                select(FavoriteMovieModel).where(
+                    FavoriteMovieModel.movie_id == movie["id"],
+                    FavoriteMovieModel.user_id == active_user_with_token["id"],
                 )
             )
             assert favorite is None
@@ -145,12 +145,12 @@ class TestRemoveFavorite:
     ):
         movie = await create_movie("Movie")
         async with test_AsyncPostgresqlSessionLocal() as db:
-            mov1 = FavoriteMovie(
+            mov1 = FavoriteMovieModel(
                 user_id=moderator_user["id"],
                 movie_id=movie["id"],
             )
 
-            mov2 = FavoriteMovie(
+            mov2 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie["id"],
             )
@@ -166,9 +166,9 @@ class TestRemoveFavorite:
         assert res.status_code == 204
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(FavoriteMovie).where(
-                    FavoriteMovie.movie_id == movie["id"],
-                    FavoriteMovie.user_id == moderator_user["id"],
+                select(FavoriteMovieModel).where(
+                    FavoriteMovieModel.movie_id == movie["id"],
+                    FavoriteMovieModel.user_id == moderator_user["id"],
                 )
             )
             favorite = result.all()
@@ -237,12 +237,12 @@ class TestListFavorites:
         movie1 = await create_movie("Movie")
         movie2 = await create_movie("Movie2")
         async with test_AsyncPostgresqlSessionLocal() as db:
-            mov1 = FavoriteMovie(
+            mov1 = FavoriteMovieModel(
                 user_id=moderator_user["id"],
                 movie_id=movie2["id"],
             )
 
-            mov2 = FavoriteMovie(
+            mov2 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie1["id"],
             )
@@ -258,9 +258,9 @@ class TestListFavorites:
         assert res.status_code == 200
         async with test_AsyncPostgresqlSessionLocal() as db:
             result = await db.scalars(
-                select(FavoriteMovie).where(
-                    FavoriteMovie.movie_id == movie2["id"],
-                    FavoriteMovie.user_id == moderator_user["id"],
+                select(FavoriteMovieModel).where(
+                    FavoriteMovieModel.movie_id == movie2["id"],
+                    FavoriteMovieModel.user_id == moderator_user["id"],
                 )
             )
             favorite = result.all()
@@ -300,17 +300,17 @@ class TestListFavorites:
         movie3 = await create_movie("Movie3")
 
         async with test_AsyncPostgresqlSessionLocal() as db:
-            mov1 = FavoriteMovie(
+            mov1 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie1["id"],
                 created_at=datetime(2024, 1, 1),
             )
-            mov2 = FavoriteMovie(
+            mov2 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie2["id"],
                 created_at=datetime(2024, 1, 3),
             )
-            mov3 = FavoriteMovie(
+            mov3 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie3["id"],
                 created_at=datetime(2024, 1, 2),
@@ -339,23 +339,23 @@ class TestListFavorites:
         movie4 = await create_movie("Movie4")
         movie5 = await create_movie("Movie5")
         async with test_AsyncPostgresqlSessionLocal() as db:
-            mov1 = FavoriteMovie(
+            mov1 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie1["id"],
             )
-            mov2 = FavoriteMovie(
+            mov2 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie2["id"],
             )
-            mov3 = FavoriteMovie(
+            mov3 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie3["id"],
             )
-            mov4 = FavoriteMovie(
+            mov4 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie4["id"],
             )
-            mov5 = FavoriteMovie(
+            mov5 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie5["id"],
             )
@@ -389,23 +389,23 @@ class TestListFavorites:
         movie4 = await create_movie("Movie4")
         movie5 = await create_movie("Movie5")
         async with test_AsyncPostgresqlSessionLocal() as db:
-            mov1 = FavoriteMovie(
+            mov1 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie1["id"],
             )
-            mov2 = FavoriteMovie(
+            mov2 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie2["id"],
             )
-            mov3 = FavoriteMovie(
+            mov3 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie3["id"],
             )
-            mov4 = FavoriteMovie(
+            mov4 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie4["id"],
             )
-            mov5 = FavoriteMovie(
+            mov5 = FavoriteMovieModel(
                 user_id=active_user_with_token["id"],
                 movie_id=movie5["id"],
             )

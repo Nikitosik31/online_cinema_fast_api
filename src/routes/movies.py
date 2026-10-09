@@ -8,8 +8,8 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from database.database import get_postgresql_db
 from database.models.interactions import (
-    MovieRating,
-    MovieReaction,
+    MovieRatingModel,
+    MovieReactionModel,
     ReactionTypeEnum,
 )
 from database.models.movies import (
@@ -204,10 +204,11 @@ async def get_movies_list(
     summary="Get movie details",
     description=(
         "Retrieve full details of a single movie by its ID, including its "
-        "genres, directors, stars, certification and the average user rating "
+        "genres, directors, stars, certification, the average user rating "
         "(`average_rating`, rounded to one decimal place; `null` if nobody "
-        "has rated the movie yet). Publicly accessible, no authentication "
-        "required."
+        "has rated the movie yet) and the numbers of likes and dislikes "
+        "(`likes_count`, `dislikes_count`). Publicly accessible, no "
+        "authentication required."
     ),
     response_model=MovieDetailResponseSchema,
     status_code=200,
@@ -242,16 +243,16 @@ async def get_movie_details(
 
     db_movie = await db.scalar(stmt)
     result = await db.scalar(
-        select(func.avg(MovieRating.rating)).where(
-            MovieRating.movie_id == movie_id
+        select(func.avg(MovieRatingModel.rating)).where(
+            MovieRatingModel.movie_id == movie_id
         )
     )
     avg_rating = round(float(result), 1) if result is not None else None
 
     counts_result = await db.execute(
-        select(MovieReaction.reaction_type, func.count())
-        .where(MovieReaction.movie_id == movie_id)
-        .group_by(MovieReaction.reaction_type)
+        select(MovieReactionModel.reaction_type, func.count())
+        .where(MovieReactionModel.movie_id == movie_id)
+        .group_by(MovieReactionModel.reaction_type)
     )
     counts = dict(counts_result.all())
     likes_count = counts.get(ReactionTypeEnum.LIKE, 0)

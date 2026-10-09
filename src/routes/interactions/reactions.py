@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
-from database.models.interactions import MovieReaction
+from database.models.interactions import MovieReactionModel
 from database.models.movies import MovieModel
 from schemas.movies import (
     MovieReactionResponseSchema,
@@ -64,15 +64,15 @@ async def put_reaction_movie(
         )
 
     reaction_movie = await db.scalar(
-        select(MovieReaction).where(
-            MovieReaction.movie_id == movie_id,
-            MovieReaction.user_id == current_user.id,
+        select(MovieReactionModel).where(
+            MovieReactionModel.movie_id == movie_id,
+            MovieReactionModel.user_id == current_user.id,
         )
     )
 
     try:
         if not reaction_movie:
-            reaction_movie = MovieReaction(
+            reaction_movie = MovieReactionModel(
                 movie_id=movie_id,
                 user_id=current_user.id,
                 reaction_type=data_reaction.reaction_type,
@@ -117,9 +117,9 @@ async def delete_reaction_movie(
     db: AsyncSession = Depends(get_postgresql_db),
 ):
     reaction_movie = await db.scalar(
-        select(MovieReaction).where(
-            MovieReaction.movie_id == movie_id,
-            MovieReaction.user_id == current_user.id,
+        select(MovieReactionModel).where(
+            MovieReactionModel.movie_id == movie_id,
+            MovieReactionModel.user_id == current_user.id,
         )
     )
 
