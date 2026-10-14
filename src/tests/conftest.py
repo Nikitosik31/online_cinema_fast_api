@@ -369,11 +369,17 @@ async def create_movie(client, moderator_user):
 @pytest.fixture
 async def create_comment():
     async def _create(
-        movie_id, user_id, content="Nice movie", created_at=None
+        movie_id,
+        user_id,
+        content="Nice movie",
+        created_at=None,
+        parent_id=None,
     ):
         kwargs = {"movie_id": movie_id, "user_id": user_id, "content": content}
         if created_at is not None:
             kwargs["created_at"] = created_at
+        if parent_id is not None:
+            kwargs["parent_id"] = parent_id
 
         async with test_AsyncPostgresqlSessionLocal() as session:
             comment = CommentModel(**kwargs)
@@ -387,6 +393,7 @@ async def create_comment():
                 "user_id": comment.user_id,
                 "content": comment.content,
                 "created_at": comment.created_at,
+                "parent_id": comment.parent_id,
             }
 
     return _create

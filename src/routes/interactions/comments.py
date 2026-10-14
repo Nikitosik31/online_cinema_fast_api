@@ -35,15 +35,23 @@ UNAUTHORIZED_RESPONSE = {
     response_model=CommentResponseSchema,
     status_code=201,
     responses={
-        404: {
-            "description": "Movie with this id does not exist",
+        401: UNAUTHORIZED_RESPONSE,
+        400: {
+            "description": "Cannot reply to a reply",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Movie with this id does not exist"}
+                    "example": {"detail": "Cannot reply to a reply"}
                 }
             },
         },
-        401: UNAUTHORIZED_RESPONSE,
+        404: {
+            "description": "Movie or parent comment not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Parent comment not found"}
+                }
+            },
+        },
     },
 )
 async def add_comment(
@@ -60,11 +68,29 @@ async def add_comment(
             status_code=404, detail="Movie with this id does not exist"
         )
 
+    if comment_data.parent_id:
+        comment_with_parent = await db.scalar(
+            select(CommentModel).where(
+                CommentModel.movie_id == movie_id,
+                CommentModel.id == comment_data.parent_id,
+            )
+        )
+        if not comment_with_parent:
+            raise HTTPException(
+                status_code=404, detail="Parent comment not found"
+            )
+        if comment_with_parent.parent_id is not None:
+            raise HTTPException(
+                status_code=400, detail="Cannot reply to a reply"
+            )
+
     comment = CommentModel(
         user_id=current_user.id,
         movie_id=movie_id,
         content=comment_data.content,
+        parent_id=comment_data.parent_id,
     )
+
     db.add(comment)
     await db.commit()
     await db.refresh(comment)

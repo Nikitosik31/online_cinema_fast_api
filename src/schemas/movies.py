@@ -154,6 +154,7 @@ class MovieReactionResponseSchema(BaseModel):
 
 class CommentRequestSchema(BaseModel):
     content: str = Field(min_length=1, max_length=1000)
+    parent_id: int | None = None
 
 
 class CommentResponseSchema(BaseModel):
@@ -163,6 +164,7 @@ class CommentResponseSchema(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
+    parent_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -70,6 +70,102 @@ class TestCreateComment:
         )
         assert res.status_code == 401
 
+    async def test_create_reply_returns_201(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "good movie"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 201
+        data = res.json()
+
+        res2 = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={
+                "content": "good movie",
+                "parent_id": data["id"],
+            },
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res2.status_code == 201
+        assert res2.json()["parent_id"] == data["id"]
+
+    async def test_create_reply_without_token_returns_404(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "good movie", "parent_id": 1},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_create_reply_parent_of_other_movie_returns_404(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie1 = await create_movie("Movie")
+        movie2 = await create_movie("Movie2")
+
+        parent = await create_comment(
+            movie1["id"], active_user_with_token["id"]
+        )
+
+        res = await client.post(
+            f"/movies/{movie2['id']}/comments/",
+            json={"content": "reply", "parent_id": parent["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_create_reply_to_reply_returns_400(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+
+        parent = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        reply = await create_comment(
+            movie["id"], active_user_with_token["id"], parent_id=parent["id"]
+        )
+
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "reply to reply", "parent_id": reply["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 400
+
+    async def test_create_comment_without_parent_has_null_parent_id(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "good movie"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 201
+        data = res.json()
+        assert data["parent_id"] is None
+
 
 class TestListComments:
     async def test_list_comments_empty_returns_empty_list(
