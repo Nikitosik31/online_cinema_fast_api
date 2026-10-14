@@ -239,3 +239,192 @@ class TestListComments:
         assert data["next_page"] is None
         assert data["total_pages"] == 1
         assert data["total_items"] == 1
+
+
+class TestDeleteComment:
+    async def test_delete_own_comment_returns_204(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res = await client.delete(
+            f"/movies/{movie['id']}/comments/{comment['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+
+        assert res.status_code == 204
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(CommentModel).where(
+                    CommentModel.movie_id == movie["id"],
+                    CommentModel.user_id == active_user_with_token["id"],
+                )
+            )
+            comments = result.all()
+
+        assert len(comments) == 0
+
+    async def test_delete_comment_by_moderator_returns_204(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(CommentModel).where(
+                    CommentModel.movie_id == movie["id"],
+                    CommentModel.user_id == active_user_with_token["id"],
+                )
+            )
+            comments = result.all()
+
+        assert len(comments) == 1
+
+        res_delete = await client.delete(
+            f"/movies/{movie['id']}/comments/{comment['id']}/",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res_delete.status_code == 204
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(CommentModel).where(
+                    CommentModel.movie_id == movie["id"],
+                    CommentModel.user_id == active_user_with_token["id"],
+                )
+            )
+            comments = result.all()
+
+        assert len(comments) == 0
+
+    async def test_delete_comment_by_admin_returns_204(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        admin_user,
+    ):
+        login_res = await client.post(
+            "/login/",
+            json={
+                "email": admin_user["email"],
+                "password": admin_user["password"],
+            },
+        )
+        access_token = login_res.json()["access_token"]
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(CommentModel).where(
+                    CommentModel.movie_id == movie["id"],
+                    CommentModel.user_id == active_user_with_token["id"],
+                )
+            )
+            comments = result.all()
+
+        assert len(comments) == 1
+
+        res_delete = await client.delete(
+            f"/movies/{movie['id']}/comments/{comment['id']}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert res_delete.status_code == 204
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            result = await db.scalars(
+                select(CommentModel).where(
+                    CommentModel.movie_id == movie["id"],
+                    CommentModel.user_id == active_user_with_token["id"],
+                )
+            )
+            comments = result.all()
+
+        assert len(comments) == 0
+
+    async def test_delete_comment_not_author_returns_403(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=moderator_user["id"],
+        )
+        delete_res = await client.delete(
+            f"/movies/{movie['id']}/comments/{comment['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert delete_res.status_code == 403
+
+    async def test_delete_comment_not_found_returns_404(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res_delete = await client.delete(
+            f"/movies/{movie['id']}/comments/999/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res_delete.status_code == 404
+
+    async def test_delete_comment_of_other_movie_returns_404(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        movie2 = await create_movie("Movie2")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res_delete = await client.delete(
+            f"/movies/{movie2["id"]}/comments/{comment['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res_delete.status_code == 404
+
+    async def test_delete_comment_without_token_returns_401(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res_delete = await client.delete(
+            f"/movies/{movie['id']}/comments/{comment['id']}/",
+        )
+
+        assert res_delete.status_code == 401

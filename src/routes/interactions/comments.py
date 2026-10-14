@@ -3,7 +3,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
-from database.models.accounts import UserModel
+from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum
 from database.models.interactions import CommentModel
 from database.models.movies import MovieModel
 from schemas.movies import (
@@ -144,3 +144,67 @@ async def list_comments(
         total_pages=total_pages,
         total_items=total_items,
     )
+
+
+@router.delete(
+    "/{movie_id}/comments/{comment_id}/",
+    summary="Delete a comment",
+    description=(
+        "Deletes a comment. The author can delete their own comment; "
+        "moderators and administrators can delete any comment. "
+        "Authentication required."
+    ),
+    status_code=204,
+    responses={
+        401: UNAUTHORIZED_RESPONSE,
+        403: {
+            "description": "The user is neither the author nor a moderator",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "You do not have permission to delete this comment"
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Comment not found for this movie",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Comment not found"}
+                }
+            },
+        },
+    },
+)
+async def delete_comment(
+    movie_id: int,
+    comment_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_comment = await db.scalar(
+        select(CommentModel).where(
+            CommentModel.movie_id == movie_id, CommentModel.id == comment_id
+        )
+    )
+    if not db_comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    group = await db.scalar(
+        select(UserGroupModel).where(
+            UserGroupModel.id == current_user.group_id
+        )
+    )
+    is_author = db_comment.user_id == current_user.id
+    is_moderator = group.name in (UserGroupEnum.MODERATOR, UserGroupEnum.ADMIN)
+
+    if not (is_author or is_moderator):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to delete this comment",
+        )
+
+    await db.delete(db_comment)
+    await db.commit()
+    return
