@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 
 from database.models.interactions import CommentModel
@@ -67,3 +69,173 @@ class TestCreateComment:
             json={"content": "good movie"},
         )
         assert res.status_code == 401
+
+
+class TestListComments:
+    async def test_list_comments_empty_returns_empty_list(
+        self, client, create_movie, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["comments"] == []
+
+    async def test_list_comments_returns_movie_comments_newest_first(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment1 = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+            created_at=datetime(2024, 1, 1),
+        )
+        comment2 = await create_comment(
+            movie["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+            created_at=datetime(2024, 1, 3),
+        )
+        comment3 = await create_comment(
+            movie["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+            created_at=datetime(2024, 1, 2),
+        )
+
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        ids = [comment["id"] for comment in data["comments"]]
+        assert ids == [comment2["id"], comment3["id"], comment1["id"]]
+
+    async def test_list_comments_movie_not_found_returns_404(self, client):
+        res = await client.get(
+            f"/movies/999999/comments/",
+        )
+        assert res.status_code == 404
+
+    async def test_list_comments_does_not_include_other_movies_comments(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie1 = await create_movie("Movie")
+        movie2 = await create_movie("Movie2")
+        comment1 = await create_comment(
+            movie1["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        comment2 = await create_comment(
+            movie2["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+        )
+
+        res = await client.get(
+            f"/movies/{movie1['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_items"] == 1
+
+    async def test_list_comments_pagination_links(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        await create_comment(
+            movie["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+        )
+        await create_comment(
+            movie["id"],
+            content="go",
+            user_id=active_user_with_token["id"],
+        )
+        await create_comment(
+            movie["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+        )
+        await create_comment(
+            movie["id"],
+            content="good",
+            user_id=active_user_with_token["id"],
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/?page=1&per_page=2",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["comments"]) == 2
+        assert data["prev_page"] is None
+        assert (
+            data["next_page"]
+            == f"/movies/{movie['id']}/comments/?page=2&per_page=2"
+        )
+        assert data["total_pages"] == 3
+        assert data["total_items"] == 5
+
+        res2 = await client.get(
+            f"/movies/{movie['id']}/comments/?page=2&per_page=2",
+        )
+        assert res2.status_code == 200
+        data = res2.json()
+        assert len(data["comments"]) == 2
+        assert (
+            data["prev_page"]
+            == f"/movies/{movie['id']}/comments/?page=1&per_page=2"
+        )
+        assert (
+            data["next_page"]
+            == f"/movies/{movie['id']}/comments/?page=3&per_page=2"
+        )
+        assert data["total_pages"] == 3
+        assert data["total_items"] == 5
+
+        res3 = await client.get(
+            f"/movies/{movie['id']}/comments/?page=3&per_page=2",
+        )
+        assert res3.status_code == 200
+        data = res3.json()
+        assert len(data["comments"]) == 1
+        assert (
+            data["prev_page"]
+            == f"/movies/{movie['id']}/comments/?page=2&per_page=2"
+        )
+        assert data["next_page"] is None
+        assert data["total_pages"] == 3
+        assert data["total_items"] == 5
+
+    async def test_list_comments_page_out_of_range_returns_empty_list(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/?page=999&per_page=2",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["comments"]) == 0
+        assert (
+            data["prev_page"]
+            == f"/movies/{movie['id']}/comments/?page=1&per_page=2"
+        )
+        assert data["next_page"] is None
+        assert data["total_pages"] == 1
+        assert data["total_items"] == 1

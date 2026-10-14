@@ -18,6 +18,7 @@ from database.models.accounts import (
 )
 from httpx import AsyncClient, ASGITransport
 
+from database.models.interactions import CommentModel
 from database.models.movies import CertificationEnum, CertificationModel
 from main import app
 from database.database import get_postgresql_db
@@ -361,6 +362,32 @@ async def create_movie(client, moderator_user):
             "stars": data["stars"],
             "price": data["price"],
         }
+
+    return _create
+
+
+@pytest.fixture
+async def create_comment():
+    async def _create(
+        movie_id, user_id, content="Nice movie", created_at=None
+    ):
+        kwargs = {"movie_id": movie_id, "user_id": user_id, "content": content}
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            comment = CommentModel(**kwargs)
+            session.add(comment)
+            await session.commit()
+            await session.refresh(comment)
+
+            return {
+                "id": comment.id,
+                "movie_id": comment.movie_id,
+                "user_id": comment.user_id,
+                "content": comment.content,
+                "created_at": comment.created_at,
+            }
 
     return _create
 
