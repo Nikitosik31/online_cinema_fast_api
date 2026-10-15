@@ -15,6 +15,15 @@ async def fetch_notifications():
         return result.all()
 
 
+async def get_notification(notification_id):
+    async with test_AsyncPostgresqlSessionLocal() as db:
+        return await db.scalar(
+            select(NotificationModel).where(
+                NotificationModel.id == notification_id
+            )
+        )
+
+
 class TestListNotifications:
     async def test_list_notifications_empty_returns_empty_list(
         self, client, active_user_with_token
@@ -363,3 +372,135 @@ class TestNotificationCreation:
         assert second.status_code == 200
 
         assert len(await fetch_notifications()) == 1
+
+
+class TestMarkNotificationRead:
+    async def test_mark_notification_read_returns_200(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        create_notification,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+        notification = await create_notification(
+            active_user_with_token["id"],
+            moderator_user["id"],
+            comment["id"],
+            NotificationTypeEnum.COMMENT_REPLY,
+        )
+
+        res = await client.patch(
+            f"/notifications/{notification['id']}/read/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["id"] == notification["id"]
+        assert data["is_read"] is True
+
+        db_notification = await get_notification(notification["id"])
+        assert db_notification.is_read is True
+
+    async def test_mark_other_users_notification_read_returns_404(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        create_notification,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+        # уведомление адресовано МОДЕРАТОРУ, а читать пытается активный пользователь
+        notification = await create_notification(
+            moderator_user["id"],
+            active_user_with_token["id"],
+            comment["id"],
+            NotificationTypeEnum.COMMENT_LIKE,
+        )
+
+        res = await client.patch(
+            f"/notifications/{notification['id']}/read/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+        db_notification = await get_notification(notification["id"])
+        assert db_notification.is_read is False
+
+    async def test_mark_notification_read_not_found_returns_404(
+        self, client, active_user_with_token
+    ):
+        res = await client.patch(
+            "/notifications/999999/read/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_mark_notification_read_without_token_returns_401(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        create_notification,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+        notification = await create_notification(
+            active_user_with_token["id"],
+            moderator_user["id"],
+            comment["id"],
+            NotificationTypeEnum.COMMENT_REPLY,
+        )
+
+        res = await client.patch(f"/notifications/{notification['id']}/read/")
+        assert res.status_code == 401
+
+    async def test_mark_notification_read_twice_is_idempotent(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        create_notification,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+        notification = await create_notification(
+            active_user_with_token["id"],
+            moderator_user["id"],
+            comment["id"],
+            NotificationTypeEnum.COMMENT_REPLY,
+        )
+        url = f"/notifications/{notification['id']}/read/"
+        headers = {
+            "Authorization": f"Bearer {active_user_with_token['access_token']}"
+        }
+
+        first = await client.patch(url, headers=headers)
+        second = await client.patch(url, headers=headers)
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json()["is_read"] is True

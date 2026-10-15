@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,3 +89,47 @@ async def list_notifications(
         total_pages=total_pages,
         total_items=total_items,
     )
+
+
+@router.patch(
+    "/{notification_id}/read/",
+    summary="Mark a notification as read",
+    description=(
+        "Marks the current user's notification as read. "
+        "Calling it again on an already read notification is safe. "
+        "Authentication required."
+    ),
+    response_model=NotificationResponseSchema,
+    status_code=200,
+    responses={
+        404: {
+            "description": "Notification not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Notification not found"}
+                }
+            },
+        },
+    },
+)
+async def read_notification(
+    notification_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    notification = await db.scalar(
+        select(NotificationModel).where(
+            NotificationModel.recipient_id == current_user.id,
+            NotificationModel.id == notification_id,
+        )
+    )
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notification.is_read = True
+
+    await db.commit()
+    await db.refresh(notification)
+
+    return NotificationResponseSchema.model_validate(notification)
