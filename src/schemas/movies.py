@@ -160,6 +160,8 @@ class CommentReplyResponseSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     parent_id: int
+    likes_count: int = 0
+    dislikes_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -178,6 +180,8 @@ class CommentResponseSchema(BaseModel):
     updated_at: datetime
     parent_id: int | None = None
     replies: list[CommentReplyResponseSchema] = []
+    likes_count: int = 0
+    dislikes_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

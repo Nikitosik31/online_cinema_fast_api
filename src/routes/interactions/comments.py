@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum
-from database.models.interactions import CommentModel, CommentReactionModel
+from database.models.interactions import (
+    CommentModel,
+    CommentReactionModel,
+    ReactionTypeEnum,
+)
 from database.models.movies import MovieModel
 from schemas.movies import (
     CommentResponseSchema,
@@ -167,6 +171,34 @@ async def list_comments(
         for reply in replies_result.all():
             replies_by_parent.setdefault(reply.parent_id, []).append(reply)
 
+    all_comments_ids = parent_ids + [
+        reply.id for replies in replies_by_parent.values() for reply in replies
+    ]
+
+    counts_by_comment = {}
+    if all_comments_ids:
+        counts_result = await db.execute(
+            select(
+                CommentReactionModel.comment_id,
+                CommentReactionModel.reaction_type,
+                func.count(),
+            )
+            .where(CommentReactionModel.comment_id.in_(all_comments_ids))
+            .group_by(
+                CommentReactionModel.comment_id,
+                CommentReactionModel.reaction_type,
+            )
+        )
+        for comment_id, reaction_type, count in counts_result.all():
+            counts_by_comment.setdefault(comment_id, {})[reaction_type] = count
+
+    def get_counts(comment_id):
+        counts = counts_by_comment.get(comment_id, {})
+        return {
+            "likes_count": counts.get(ReactionTypeEnum.LIKE, 0),
+            "dislikes_count": counts.get(ReactionTypeEnum.DISLIKE, 0),
+        }
+
     count_stmt = (
         select(func.count())
         .select_from(CommentModel)
@@ -183,10 +215,13 @@ async def list_comments(
     items = [
         CommentResponseSchema.model_validate(comment).model_copy(
             update={
+                **get_counts(comment.id),
                 "replies": [
-                    CommentReplyResponseSchema.model_validate(reply)
+                    CommentReplyResponseSchema.model_validate(
+                        reply
+                    ).model_copy(update=get_counts(reply.id))
                     for reply in replies_by_parent.get(comment.id, [])
-                ]
+                ],
             }
         )
         for comment in comments
