@@ -7,6 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from database.database import get_postgresql_db
+from database.models.interactions import (
+    MovieRatingModel,
+    MovieReactionModel,
+    ReactionTypeEnum,
+)
 from database.models.movies import (
     MovieModel,
     GenreModel,
@@ -197,7 +202,14 @@ async def get_movies_list(
 @router.get(
     "/{movie_id}/",
     summary="Get movie details",
-    description="Retrieve full details of a single movie by its ID. Publicly accessible, no authentication required.",
+    description=(
+        "Retrieve full details of a single movie by its ID, including its "
+        "genres, directors, stars, certification, the average user rating "
+        "(`average_rating`, rounded to one decimal place; `null` if nobody "
+        "has rated the movie yet) and the numbers of likes and dislikes "
+        "(`likes_count`, `dislikes_count`). Publicly accessible, no "
+        "authentication required."
+    ),
     response_model=MovieDetailResponseSchema,
     status_code=200,
     responses={
@@ -230,10 +242,31 @@ async def get_movie_details(
     )
 
     db_movie = await db.scalar(stmt)
+    result = await db.scalar(
+        select(func.avg(MovieRatingModel.rating)).where(
+            MovieRatingModel.movie_id == movie_id
+        )
+    )
+    avg_rating = round(float(result), 1) if result is not None else None
+
+    counts_result = await db.execute(
+        select(MovieReactionModel.reaction_type, func.count())
+        .where(MovieReactionModel.movie_id == movie_id)
+        .group_by(MovieReactionModel.reaction_type)
+    )
+    counts = dict(counts_result.all())
+    likes_count = counts.get(ReactionTypeEnum.LIKE, 0)
+    dislikes_count = counts.get(ReactionTypeEnum.DISLIKE, 0)
 
     if not db_movie:
         raise HTTPException(
             status_code=404, detail="Movie with this id does not exist"
         )
 
-    return MovieDetailResponseSchema.model_validate(db_movie)
+    return MovieDetailResponseSchema.model_validate(db_movie).model_copy(
+        update={
+            "average_rating": avg_rating,
+            "likes_count": likes_count,
+            "dislikes_count": dislikes_count,
+        }
+    )

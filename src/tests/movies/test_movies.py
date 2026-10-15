@@ -4,9 +4,8 @@ from database.models.movies import (
     CertificationModel,
     CertificationEnum,
     GenreModel,
-    MovieModel,
 )
-from conftest import test_AsyncPostgresqlSessionLocal
+from tests.conftest import test_AsyncPostgresqlSessionLocal
 
 
 class TestCreateMovie:

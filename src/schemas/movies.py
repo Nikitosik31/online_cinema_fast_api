@@ -1,8 +1,11 @@
 import decimal
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
+
+from database.models.interactions import ReactionTypeEnum, NotificationTypeEnum
 
 
 class NamedEntityRequestSchema(BaseModel):
@@ -93,6 +96,9 @@ class MovieDetailResponseSchema(BaseModel):
     genres: list[GenreResponseSchema]
     directors: list[DirectorResponseSchema]
     stars: list[StarResponseSchema]
+    average_rating: float | None = None
+    likes_count: int = 0
+    dislikes_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -117,5 +123,108 @@ class GenreWithMovieCountResponseSchema(BaseModel):
     id: int
     name: str
     movie_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovieRatingRequestSchema(BaseModel):
+    rating: int = Field(ge=1, le=10)
+
+
+class MovieRatingResponseSchema(BaseModel):
+    movie_id: int
+    rating: int
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovieReactionRequestSchema(BaseModel):
+    reaction_type: ReactionTypeEnum
+
+
+class MovieReactionResponseSchema(BaseModel):
+    id: int
+    movie_id: int
+    reaction_type: ReactionTypeEnum
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommentReplyResponseSchema(BaseModel):
+    id: int
+    movie_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    parent_id: int
+    likes_count: int = 0
+    dislikes_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommentRequestSchema(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+    parent_id: int | None = None
+
+
+class CommentResponseSchema(BaseModel):
+    id: int
+    movie_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    parent_id: int | None = None
+    replies: list[CommentReplyResponseSchema] = []
+    likes_count: int = 0
+    dislikes_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommentListResponseSchema(BaseModel):
+    comments: List[CommentResponseSchema]
+    prev_page: Optional[str]
+    next_page: Optional[str]
+    total_pages: int
+    total_items: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommentReactionRequestSchema(BaseModel):
+    reaction_type: ReactionTypeEnum
+
+
+class CommentReactionResponseSchema(BaseModel):
+    id: int
+    comment_id: int
+    reaction_type: ReactionTypeEnum
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationResponseSchema(BaseModel):
+    id: int
+    notification_type: NotificationTypeEnum
+    comment_id: int
+    sender_id: int
+    is_read: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationListResponseSchema(BaseModel):
+    notifications: List[NotificationResponseSchema]
+    prev_page: Optional[str]
+    next_page: Optional[str]
+    total_pages: int
+    total_items: int
 
     model_config = ConfigDict(from_attributes=True)

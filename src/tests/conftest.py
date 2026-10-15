@@ -18,6 +18,7 @@ from database.models.accounts import (
 )
 from httpx import AsyncClient, ASGITransport
 
+from database.models.interactions import CommentModel, NotificationModel
 from database.models.movies import CertificationEnum, CertificationModel
 from main import app
 from database.database import get_postgresql_db
@@ -100,6 +101,25 @@ async def active_user(client):
         await client.post("/activate/", json={"token": token_obj.token})
 
     return {"email": email, "password": password, "id": user_id}
+
+
+@pytest.fixture
+async def active_user_with_token(client, active_user):
+    login_res = await client.post(
+        "/login/",
+        json={
+            "email": active_user["email"],
+            "password": active_user["password"],
+        },
+    )
+    access_token = login_res.json()["access_token"]
+
+    return {
+        "email": active_user["email"],
+        "password": active_user["password"],
+        "id": active_user["id"],
+        "access_token": access_token,
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -342,6 +362,78 @@ async def create_movie(client, moderator_user):
             "stars": data["stars"],
             "price": data["price"],
         }
+
+    return _create
+
+
+@pytest.fixture
+async def create_comment():
+    async def _create(
+        movie_id,
+        user_id,
+        content="Nice movie",
+        created_at=None,
+        parent_id=None,
+    ):
+        kwargs = {"movie_id": movie_id, "user_id": user_id, "content": content}
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+        if parent_id is not None:
+            kwargs["parent_id"] = parent_id
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            comment = CommentModel(**kwargs)
+            session.add(comment)
+            await session.commit()
+            await session.refresh(comment)
+
+            return {
+                "id": comment.id,
+                "movie_id": comment.movie_id,
+                "user_id": comment.user_id,
+                "content": comment.content,
+                "created_at": comment.created_at,
+                "parent_id": comment.parent_id,
+            }
+
+    return _create
+
+
+@pytest.fixture
+async def create_notification():
+    async def _create(
+        recipient_id,
+        sender_id,
+        comment_id,
+        notification_type,
+        is_read=False,
+        created_at=None,
+    ):
+        kwargs = {
+            "recipient_id": recipient_id,
+            "sender_id": sender_id,
+            "comment_id": comment_id,
+            "notification_type": notification_type,
+            "is_read": is_read,
+        }
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            notification = NotificationModel(**kwargs)
+            session.add(notification)
+            await session.commit()
+            await session.refresh(notification)
+
+            return {
+                "id": notification.id,
+                "recipient_id": notification.recipient_id,
+                "sender_id": notification.sender_id,
+                "comment_id": notification.comment_id,
+                "notification_type": notification.notification_type,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at,
+            }
 
     return _create
 
