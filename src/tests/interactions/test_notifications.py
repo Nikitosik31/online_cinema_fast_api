@@ -1,6 +1,18 @@
 from datetime import datetime
 
-from database.models.interactions import NotificationTypeEnum
+from sqlalchemy import select
+
+from database.models.interactions import (
+    NotificationTypeEnum,
+    NotificationModel,
+)
+from tests.conftest import test_AsyncPostgresqlSessionLocal
+
+
+async def fetch_notifications():
+    async with test_AsyncPostgresqlSessionLocal() as db:
+        result = await db.scalars(select(NotificationModel))
+        return result.all()
 
 
 class TestListNotifications:
@@ -198,3 +210,156 @@ class TestListNotifications:
     async def test_list_notifications_without_token_returns_401(self, client):
         res = await client.get("/notifications/")
         assert res.status_code == 401
+
+
+class TestNotificationCreation:
+    async def test_reply_creates_notification_for_parent_author(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        parent = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "reply", "parent_id": parent["id"]},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 201
+
+        notifications = await fetch_notifications()
+        assert len(notifications) == 1
+        notification = notifications[0]
+        assert notification.recipient_id == active_user_with_token["id"]
+        assert notification.sender_id == moderator_user["id"]
+        assert notification.comment_id == res.json()["id"]
+        assert (
+            notification.notification_type
+            == NotificationTypeEnum.COMMENT_REPLY
+        )
+        assert notification.is_read is False
+
+    async def test_reply_to_own_comment_does_not_create_notification(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        parent = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        res = await client.post(
+            f"/movies/{movie['id']}/comments/",
+            json={"content": "reply", "parent_id": parent["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 201
+        assert await fetch_notifications() == []
+
+    async def test_like_comment_creates_notification_for_author(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        res = await client.put(
+            f"/movies/{movie['id']}/comments/{comment['id']}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+
+        notifications = await fetch_notifications()
+        assert len(notifications) == 1
+        notification = notifications[0]
+        assert notification.recipient_id == active_user_with_token["id"]
+        assert notification.sender_id == moderator_user["id"]
+        assert notification.comment_id == comment["id"]
+        assert (
+            notification.notification_type == NotificationTypeEnum.COMMENT_LIKE
+        )
+
+    async def test_like_own_comment_does_not_create_notification(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        res = await client.put(
+            f"/movies/{movie['id']}/comments/{comment['id']}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        assert await fetch_notifications() == []
+
+    async def test_dislike_comment_does_not_create_notification(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+
+        res = await client.put(
+            f"/movies/{movie['id']}/comments/{comment['id']}/reaction/",
+            json={"reaction_type": "dislike"},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        assert await fetch_notifications() == []
+
+    async def test_repeated_like_does_not_duplicate_notification(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"]
+        )
+        url = f"/movies/{movie['id']}/comments/{comment['id']}/reaction/"
+        headers = {"Authorization": f"Bearer {moderator_user['access_token']}"}
+
+        first = await client.put(
+            url, json={"reaction_type": "like"}, headers=headers
+        )
+        second = await client.put(
+            url, json={"reaction_type": "like"}, headers=headers
+        )
+        assert first.status_code == 200
+        assert second.status_code == 200
+
+        assert len(await fetch_notifications()) == 1

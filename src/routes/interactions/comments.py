@@ -9,6 +9,8 @@ from database.models.interactions import (
     CommentModel,
     CommentReactionModel,
     ReactionTypeEnum,
+    NotificationModel,
+    NotificationTypeEnum,
 )
 from database.models.movies import MovieModel
 from schemas.movies import (
@@ -38,6 +40,9 @@ UNAUTHORIZED_RESPONSE = {
     summary="Add a comment to a movie",
     description=(
         "Creates a new comment on the movie on behalf of the current user. "
+        "Pass `parent_id` to reply to a top-level comment of the same movie "
+        "(replying to a reply is not allowed). A reply to someone else's "
+        "comment sends a notification to the author of the parent comment. "
         "Authentication required."
     ),
     response_model=CommentResponseSchema,
@@ -76,6 +81,8 @@ async def add_comment(
             status_code=404, detail="Movie with this id does not exist"
         )
 
+    comment_with_parent = None
+
     if comment_data.parent_id:
         comment_with_parent = await db.scalar(
             select(CommentModel).where(
@@ -100,6 +107,17 @@ async def add_comment(
     )
 
     db.add(comment)
+    await db.flush()
+
+    if comment_with_parent and comment_with_parent.user_id != current_user.id:
+        db.add(
+            NotificationModel(
+                recipient_id=comment_with_parent.user_id,
+                sender_id=current_user.id,
+                comment_id=comment.id,
+                notification_type=NotificationTypeEnum.COMMENT_REPLY,
+            )
+        )
     await db.commit()
     await db.refresh(comment)
 
@@ -316,7 +334,8 @@ async def delete_comment(
     description=(
         "Sets the current user's reaction (like or dislike) to the comment. "
         "If the user has already reacted to this comment, the reaction is "
-        "replaced. Authentication required."
+        "replaced. A new like on someone else's comment sends a notification "
+        "to the comment's author. Authentication required."
     ),
     response_model=CommentReactionResponseSchema,
     status_code=200,
@@ -353,6 +372,8 @@ async def put_reaction_comment(
             CommentReactionModel.user_id == current_user.id,
         )
     )
+    should_notify = False
+
     try:
         if not reaction:
             reaction = CommentReactionModel(
@@ -361,9 +382,26 @@ async def put_reaction_comment(
                 reaction_type=reaction_data.reaction_type,
             )
             db.add(reaction)
+            should_notify = (
+                reaction_data.reaction_type == ReactionTypeEnum.LIKE
+            )
         else:
+            was_like = reaction.reaction_type == ReactionTypeEnum.LIKE
             reaction.reaction_type = reaction_data.reaction_type
+            should_notify = (
+                reaction_data.reaction_type == ReactionTypeEnum.LIKE
+                and not was_like
+            )
 
+        if should_notify and db_comment.user_id != current_user.id:
+            db.add(
+                NotificationModel(
+                    recipient_id=db_comment.user_id,
+                    sender_id=current_user.id,
+                    comment_id=comment_id,
+                    notification_type=NotificationTypeEnum.COMMENT_LIKE,
+                )
+            )
         await db.commit()
         await db.refresh(reaction)
 
