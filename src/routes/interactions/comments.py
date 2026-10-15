@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum
-from database.models.interactions import CommentModel
+from database.models.interactions import CommentModel, CommentReactionModel
 from database.models.movies import MovieModel
 from schemas.movies import (
     CommentResponseSchema,
     CommentRequestSchema,
     CommentListResponseSchema,
     CommentReplyResponseSchema,
+    CommentReactionResponseSchema,
+    CommentReactionRequestSchema,
 )
 from security.dependencies import get_current_user
 
@@ -266,5 +269,119 @@ async def delete_comment(
         )
 
     await db.delete(db_comment)
+    await db.commit()
+    return
+
+
+@router.put(
+    "/{movie_id}/comments/{comment_id}/reaction/",
+    summary="Like or dislike a comment",
+    description=(
+        "Sets the current user's reaction (like or dislike) to the comment. "
+        "If the user has already reacted to this comment, the reaction is "
+        "replaced. Authentication required."
+    ),
+    response_model=CommentReactionResponseSchema,
+    status_code=200,
+    responses={
+        401: UNAUTHORIZED_RESPONSE,
+        404: {
+            "description": "Comment not found for this movie",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Comment not found"}
+                }
+            },
+        },
+    },
+)
+async def put_reaction_comment(
+    movie_id: int,
+    comment_id: int,
+    reaction_data: CommentReactionRequestSchema,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    db_comment = await db.scalar(
+        select(CommentModel).where(
+            CommentModel.movie_id == movie_id, CommentModel.id == comment_id
+        )
+    )
+    if not db_comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    reaction = await db.scalar(
+        select(CommentReactionModel).where(
+            CommentReactionModel.comment_id == comment_id,
+            CommentReactionModel.user_id == current_user.id,
+        )
+    )
+    try:
+        if not reaction:
+            reaction = CommentReactionModel(
+                comment_id=comment_id,
+                user_id=current_user.id,
+                reaction_type=reaction_data.reaction_type,
+            )
+            db.add(reaction)
+        else:
+            reaction.reaction_type = reaction_data.reaction_type
+
+        await db.commit()
+        await db.refresh(reaction)
+
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid input data.")
+
+    return CommentReactionResponseSchema.model_validate(reaction)
+
+
+@router.delete(
+    "/{movie_id}/comments/{comment_id}/reaction/",
+    summary="Remove my reaction to a comment",
+    description=(
+        "Removes the current user's like or dislike for the comment. "
+        "Authentication required."
+    ),
+    status_code=204,
+    responses={
+        401: UNAUTHORIZED_RESPONSE,
+        404: {
+            "description": "Comment or reaction not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Reaction not found"}
+                }
+            },
+        },
+    },
+)
+async def delete_reaction_comment(
+    movie_id: int,
+    comment_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+
+    comment = await db.scalar(
+        select(CommentModel).where(
+            CommentModel.movie_id == movie_id, CommentModel.id == comment_id
+        )
+    )
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    reaction = await db.scalar(
+        select(CommentReactionModel).where(
+            CommentReactionModel.comment_id == comment_id,
+            CommentReactionModel.user_id == current_user.id,
+        )
+    )
+    if not reaction:
+        raise HTTPException(status_code=404, detail="Reaction not found")
+
+    await db.delete(reaction)
     await db.commit()
     return
