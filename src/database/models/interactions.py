@@ -93,3 +93,23 @@ class CommentModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now
     )
+
+
+class CommentReactionModel(Base):
+    __tablename__ = "comment_reactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "comment_id", name="unique_comment_reactions"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    comment_id: Mapped[int] = mapped_column(
+        ForeignKey("comments.id", ondelete="CASCADE")
+    )
+    reaction_type: Mapped[ReactionTypeEnum] = mapped_column(
+        Enum(ReactionTypeEnum)
+    )
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)

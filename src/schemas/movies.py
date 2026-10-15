@@ -190,3 +190,16 @@ class CommentListResponseSchema(BaseModel):
     total_items: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CommentReactionRequestSchema(BaseModel):
+    reaction_type: ReactionTypeEnum
+
+
+class CommentReactionResponseSchema(BaseModel):
+    id: int
+    comment_id: int
+    reaction_type: ReactionTypeEnum
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
