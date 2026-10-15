@@ -19,6 +19,11 @@ class ReactionTypeEnum(StrEnum):
     DISLIKE = "dislike"
 
 
+class NotificationTypeEnum(StrEnum):
+    COMMENT_REPLY = "comment_reply"
+    COMMENT_LIKE = "comment_like"
+
+
 class FavoriteMovieModel(Base):
     __tablename__ = "favorite_movies"
     __table_args__ = (
@@ -112,4 +117,24 @@ class CommentReactionModel(Base):
     reaction_type: Mapped[ReactionTypeEnum] = mapped_column(
         Enum(ReactionTypeEnum)
     )
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
+class NotificationModel(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    recipient_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    sender_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    notification_type: Mapped[NotificationTypeEnum] = mapped_column(
+        Enum(NotificationTypeEnum)
+    )
+    comment_id: Mapped[int] = mapped_column(
+        ForeignKey("comments.id", ondelete="CASCADE")
+    )
+    is_read: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
