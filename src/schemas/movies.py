@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from database.models.interactions import ReactionTypeEnum
+from database.models.interactions import ReactionTypeEnum, NotificationTypeEnum
 
 
 class NamedEntityRequestSchema(BaseModel):
@@ -205,5 +205,26 @@ class CommentReactionResponseSchema(BaseModel):
     comment_id: int
     reaction_type: ReactionTypeEnum
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationResponseSchema(BaseModel):
+    id: int
+    notification_type: NotificationTypeEnum
+    comment_id: int
+    sender_id: int
+    is_read: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationListResponseSchema(BaseModel):
+    notifications: List[NotificationResponseSchema]
+    prev_page: Optional[str]
+    next_page: Optional[str]
+    total_pages: int
+    total_items: int
 
     model_config = ConfigDict(from_attributes=True)

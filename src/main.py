@@ -10,6 +10,7 @@ from routes.interactions import (
     ratings_router,
     reactions_router,
     comments_router,
+    notifications_router,
 )
 
 app = FastAPI()
@@ -22,3 +23,4 @@ app.include_router(movies_router)
 app.include_router(reactions_router)
 app.include_router(ratings_router)
 app.include_router(comments_router)
+app.include_router(notifications_router)

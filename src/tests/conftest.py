@@ -18,7 +18,7 @@ from database.models.accounts import (
 )
 from httpx import AsyncClient, ASGITransport
 
-from database.models.interactions import CommentModel
+from database.models.interactions import CommentModel, NotificationModel
 from database.models.movies import CertificationEnum, CertificationModel
 from main import app
 from database.database import get_postgresql_db
@@ -394,6 +394,45 @@ async def create_comment():
                 "content": comment.content,
                 "created_at": comment.created_at,
                 "parent_id": comment.parent_id,
+            }
+
+    return _create
+
+
+@pytest.fixture
+async def create_notification():
+    async def _create(
+        recipient_id,
+        sender_id,
+        comment_id,
+        notification_type,
+        is_read=False,
+        created_at=None,
+    ):
+        kwargs = {
+            "recipient_id": recipient_id,
+            "sender_id": sender_id,
+            "comment_id": comment_id,
+            "notification_type": notification_type,
+            "is_read": is_read,
+        }
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            notification = NotificationModel(**kwargs)
+            session.add(notification)
+            await session.commit()
+            await session.refresh(notification)
+
+            return {
+                "id": notification.id,
+                "recipient_id": notification.recipient_id,
+                "sender_id": notification.sender_id,
+                "comment_id": notification.comment_id,
+                "notification_type": notification.notification_type,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at,
             }
 
     return _create

@@ -111,9 +111,11 @@ async def add_comment(
     summary="List comments of a movie",
     description=(
         "Returns a paginated list of top-level comments for the movie, "
-        "newest first. Each comment contains its replies (oldest first). "
-        "Pagination counts only top-level comments. "
-        "Publicly accessible, no authentication required."
+        "newest first. Each comment contains its replies (oldest first) "
+        "and the number of likes and dislikes (`likes_count`, "
+        "`dislikes_count`) for itself and for each reply. Pagination counts "
+        "only top-level comments. Publicly accessible, no authentication "
+        "required."
     ),
     response_model=CommentListResponseSchema,
     status_code=200,
