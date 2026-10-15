@@ -10,6 +10,7 @@ from schemas.movies import (
     CommentResponseSchema,
     CommentRequestSchema,
     CommentListResponseSchema,
+    CommentReplyResponseSchema,
 )
 from security.dependencies import get_current_user
 
@@ -102,8 +103,10 @@ async def add_comment(
     "/{movie_id}/comments/",
     summary="List comments of a movie",
     description=(
-        "Returns a paginated list of comments for the movie, "
-        "newest first. Publicly accessible, no authentication required."
+        "Returns a paginated list of top-level comments for the movie, "
+        "newest first. Each comment contains its replies (oldest first). "
+        "Pagination counts only top-level comments. "
+        "Publicly accessible, no authentication required."
     ),
     response_model=CommentListResponseSchema,
     status_code=200,
@@ -137,17 +140,36 @@ async def list_comments(
     offset = (page - 1) * per_page
     stmt = await db.scalars(
         select(CommentModel)
-        .where(CommentModel.movie_id == movie_id)
+        .where(
+            CommentModel.movie_id == movie_id,
+            CommentModel.parent_id.is_(None),
+        )
         .order_by(CommentModel.created_at.desc(), CommentModel.id.desc())
         .offset(offset)
         .limit(per_page)
     )
     comments = stmt.all()
 
+    parent_ids = [comment.id for comment in comments]
+
+    replies_by_parent = {}
+    if parent_ids:
+        replies_result = await db.scalars(
+            select(CommentModel)
+            .where(
+                CommentModel.parent_id.in_(parent_ids),
+            )
+            .order_by(CommentModel.created_at.asc(), CommentModel.id.asc())
+        )
+        for reply in replies_result.all():
+            replies_by_parent.setdefault(reply.parent_id, []).append(reply)
+
     count_stmt = (
         select(func.count())
         .select_from(CommentModel)
-        .where(CommentModel.movie_id == movie_id)
+        .where(
+            CommentModel.movie_id == movie_id, CommentModel.parent_id.is_(None)
+        )
     )
     result_count = await db.execute(count_stmt)
     total_items = result_count.scalar() or 0
@@ -155,8 +177,20 @@ async def list_comments(
     total_pages = (total_items + per_page - 1) // per_page
     prev_page_number = min(page - 1, total_pages)
 
+    items = [
+        CommentResponseSchema.model_validate(comment).model_copy(
+            update={
+                "replies": [
+                    CommentReplyResponseSchema.model_validate(reply)
+                    for reply in replies_by_parent.get(comment.id, [])
+                ]
+            }
+        )
+        for comment in comments
+    ]
+
     return CommentListResponseSchema(
-        comments=comments,
+        comments=items,
         prev_page=(
             f"/movies/{movie_id}/comments/?page={prev_page_number}&per_page={per_page}"
             if prev_page_number >= 1

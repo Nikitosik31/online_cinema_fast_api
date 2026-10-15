@@ -152,6 +152,18 @@ class MovieReactionResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CommentReplyResponseSchema(BaseModel):
+    id: int
+    movie_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    parent_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CommentRequestSchema(BaseModel):
     content: str = Field(min_length=1, max_length=1000)
     parent_id: int | None = None
@@ -165,6 +177,7 @@ class CommentResponseSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     parent_id: int | None = None
+    replies: list[CommentReplyResponseSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
 

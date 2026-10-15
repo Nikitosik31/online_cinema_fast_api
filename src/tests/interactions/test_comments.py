@@ -336,6 +336,141 @@ class TestListComments:
         assert data["total_pages"] == 1
         assert data["total_items"] == 1
 
+    async def test_list_comments_returns_replies_inside_parent(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        replies1 = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+            parent_id=comment["id"],
+        )
+        replies2 = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+            parent_id=comment["id"],
+        )
+
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        reply_ids = [reply["id"] for reply in data["comments"][0]["replies"]]
+        assert reply_ids == [replies1["id"], replies2["id"]]
+        assert len(data["comments"]) == 1
+        assert data["total_items"] == 1
+
+    async def test_list_comments_replies_are_ordered_oldest_first(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        parent = await create_comment(
+            movie["id"], active_user_with_token["id"], content="parent"
+        )
+
+        reply_jan3 = await create_comment(
+            movie["id"],
+            active_user_with_token["id"],
+            content="third",
+            parent_id=parent["id"],
+            created_at=datetime(2024, 1, 3),
+        )
+        reply_jan1 = await create_comment(
+            movie["id"],
+            active_user_with_token["id"],
+            content="first",
+            parent_id=parent["id"],
+            created_at=datetime(2024, 1, 1),
+        )
+        reply_jan2 = await create_comment(
+            movie["id"],
+            active_user_with_token["id"],
+            content="second",
+            parent_id=parent["id"],
+            created_at=datetime(2024, 1, 2),
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        reply_ids = [r["id"] for r in data["comments"][0]["replies"]]
+        assert reply_ids == [
+            reply_jan1["id"],
+            reply_jan2["id"],
+            reply_jan3["id"],
+        ]
+
+    async def test_list_comments_pagination_counts_only_top_level(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        parent1 = await create_comment(
+            movie_id=movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        parent2 = await create_comment(
+            movie_id=movie["id"],
+            content="second movie",
+            user_id=active_user_with_token["id"],
+        )
+        reply_jan1 = await create_comment(
+            movie_id=movie["id"],
+            content="first movie",
+            user_id=active_user_with_token["id"],
+            parent_id=parent1["id"],
+        )
+        reply_jan2 = await create_comment(
+            movie_id=movie["id"],
+            content="second movie",
+            user_id=active_user_with_token["id"],
+            parent_id=parent1["id"],
+        )
+        reply_jan3 = await create_comment(
+            movie_id=movie["id"],
+            content="third movie",
+            user_id=active_user_with_token["id"],
+            parent_id=parent2["id"],
+        )
+
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["comments"]) == 2
+        assert data["total_items"] == 2
+        total_replies = sum(
+            len(comment["replies"]) for comment in data["comments"]
+        )
+        assert total_replies == 3
+
+    async def test_list_comments_comment_without_replies_has_empty_list(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["comments"]) == 1
+        assert data["comments"][0]["replies"] == []
+
 
 class TestDeleteComment:
     async def test_delete_own_comment_returns_204(
