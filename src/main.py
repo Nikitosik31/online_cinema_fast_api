@@ -1,4 +1,8 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from database.database import seed_db
 from routes import (
     accounts_router,
     admin_router,
@@ -13,7 +17,14 @@ from routes.interactions import (
     notifications_router,
 )
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await seed_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(accounts_router)
 app.include_router(admin_router)
