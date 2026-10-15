@@ -471,6 +471,129 @@ class TestListComments:
         assert len(data["comments"]) == 1
         assert data["comments"][0]["replies"] == []
 
+    async def test_list_comments_without_reactions_has_zero_counts(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"],
+            content="good movie",
+            user_id=active_user_with_token["id"],
+        )
+        res = await client.get(
+            f"/movies/{movie['id']}/comments/",
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["comments"][0]["likes_count"] == 0
+        assert data["comments"][0]["dislike_count"] == 0
+
+    async def test_list_comments_returns_likes_and_dislikes_counts(
+        self,
+        client,
+        create_movie,
+        create_comment,
+        active_user_with_token,
+        moderator_user,
+        admin_user,
+    ):
+        login_res = await client.post(
+            "/login/",
+            json={
+                "email": admin_user["email"],
+                "password": admin_user["password"],
+            },
+        )
+        admin_token = login_res.json()["access_token"]
+
+        movie = await create_movie("Movie")
+        comment = await create_comment(
+            movie["id"], active_user_with_token["id"], content="Test comment"
+        )
+        url = f"/movies/{movie['id']}/comments/{comment['id']}/reaction/"
+
+        await client.put(
+            url,
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        await client.put(
+            url,
+            json={"reaction_type": "dislike"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        await client.put(
+            url,
+            json={"reaction_type": "like"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        res = await client.get(f"/movies/{movie['id']}/comments/")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["comments"][0]["likes_count"] == 2
+        assert data["comments"][0]["dislikes_count"] == 1
+
+    async def test_list_comments_reaction_counts_ignore_other_comments(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        comment1 = await create_comment(
+            movie["id"], active_user_with_token["id"], content="first"
+        )
+        comment2 = await create_comment(
+            movie["id"], active_user_with_token["id"], content="second"
+        )
+
+        await client.put(
+            f"/movies/{movie['id']}/comments/{comment1['id']}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+
+        res = await client.get(f"/movies/{movie['id']}/comments/")
+        assert res.status_code == 200
+        by_id = {c["id"]: c for c in res.json()["comments"]}
+        assert by_id[comment1["id"]]["likes_count"] == 1
+        assert by_id[comment1["id"]]["dislikes_count"] == 0
+        assert by_id[comment2["id"]]["likes_count"] == 0
+        assert by_id[comment2["id"]]["dislikes_count"] == 0
+
+    async def test_list_comments_reply_has_reaction_counts(
+        self, client, create_movie, create_comment, active_user_with_token
+    ):
+        movie = await create_movie("Movie")
+        parent = await create_comment(
+            movie["id"], active_user_with_token["id"], content="parent"
+        )
+        reply = await create_comment(
+            movie["id"],
+            active_user_with_token["id"],
+            content="reply",
+            parent_id=parent["id"],
+        )
+
+        await client.put(
+            f"/movies/{movie['id']}/comments/{reply['id']}/reaction/",
+            json={"reaction_type": "like"},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+
+        res = await client.get(f"/movies/{movie['id']}/comments/")
+        assert res.status_code == 200
+        data = res.json()
+        reply_data = data["comments"][0]["replies"][0]
+        assert reply_data["likes_count"] == 1
+        assert reply_data["dislikes_count"] == 0
+
 
 class TestDeleteComment:
     async def test_delete_own_comment_returns_204(
