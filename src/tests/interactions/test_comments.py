@@ -97,13 +97,13 @@ class TestCreateComment:
         assert res2.status_code == 201
         assert res2.json()["parent_id"] == data["id"]
 
-    async def test_create_reply_without_token_returns_404(
+    async def test_create_reply_parent_not_found_returns_404(
         self, client, create_movie, active_user_with_token
     ):
         movie = await create_movie("Movie")
         res = await client.post(
             f"/movies/{movie['id']}/comments/",
-            json={"content": "good movie", "parent_id": 1},
+            json={"content": "good movie", "parent_id": 99999},
             headers={
                 "Authorization": f"Bearer {active_user_with_token['access_token']}"
             },
@@ -486,7 +486,7 @@ class TestListComments:
         assert res.status_code == 200
         data = res.json()
         assert data["comments"][0]["likes_count"] == 0
-        assert data["comments"][0]["dislike_count"] == 0
+        assert data["comments"][0]["dislikes_count"] == 0
 
     async def test_list_comments_returns_likes_and_dislikes_counts(
         self,
