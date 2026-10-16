@@ -467,3 +467,62 @@ class TestClearCart:
             "/cart/",
         )
         assert res.status_code == 401
+
+
+class TestAdminGetCart:
+    async def test_moderator_can_view_user_cart(
+        self,
+        client,
+        create_movie,
+        create_cart_item,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        await create_cart_item(active_user_with_token["id"], movie_1["id"])
+        res = await client.get(
+            f"/cart/moderator/{active_user_with_token['id']}/",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_items"] == 1
+        assert data["items"][0]["movie_id"] == movie_1["id"]
+        assert float(data["total_price"]) == 150
+
+    async def test_regular_user_cannot_view_other_cart_returns_403(
+        self,
+        client,
+        create_movie,
+        create_cart_item,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        await create_cart_item(moderator_user["id"], movie_1["id"])
+        res = await client.get(
+            f"/cart/moderator/{moderator_user['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 403
+
+    async def test_admin_view_cart_user_not_found_returns_404(
+        self, client, create_movie, moderator_user
+    ):
+        res = await client.get(
+            f"/cart/moderator/99999/",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_admin_view_cart_without_token_returns_401(self, client):
+        res = await client.get(
+            "/cart/moderator/1/",
+        )
+        assert res.status_code == 401

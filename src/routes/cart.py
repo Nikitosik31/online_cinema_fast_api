@@ -16,7 +16,7 @@ from schemas.cart import (
     CartItemResponseSchema,
 )
 from schemas.movies import GenreResponseSchema
-from security.dependencies import get_current_user
+from security.dependencies import get_current_user, require_moderator
 
 router = APIRouter(
     prefix="/cart",
@@ -119,24 +119,11 @@ async def add_item_to_cart(
     return MessageResponseSchema(message="Movie added to the cart")
 
 
-@router.get(
-    "/",
-    summary="Get my cart",
-    description=(
-        "Returns the current user's cart with the movies in it (title, "
-        "price, genres, release year), the number of items and the total "
-        "price. If the user has no cart yet, an empty cart is returned. "
-        "Authentication required."
-    ),
-    response_model=CartResponseSchema,
-    status_code=200,
-)
-async def get_cart(
-    current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_postgresql_db),
-):
+async def build_cart_response(
+    user_id: int, db: AsyncSession
+) -> CartResponseSchema:
     user_cart = await db.scalar(
-        select(CartModel).where(CartModel.user_id == current_user.id)
+        select(CartModel).where(CartModel.user_id == user_id)
     )
     if not user_cart:
         return CartResponseSchema(
@@ -175,6 +162,25 @@ async def get_cart(
         total_items=total_items,
         total_price=total_price,
     )
+
+
+@router.get(
+    "/",
+    summary="Get my cart",
+    description=(
+        "Returns the current user's cart with the movies in it (title, "
+        "price, genres, release year), the number of items and the total "
+        "price. If the user has no cart yet, an empty cart is returned. "
+        "Authentication required."
+    ),
+    response_model=CartResponseSchema,
+    status_code=200,
+)
+async def get_cart(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    return await build_cart_response(current_user.id, db)
 
 
 @router.delete(
@@ -245,3 +251,35 @@ async def clear_cart(
     )
     await db.commit()
     return
+
+
+@router.get(
+    "/moderator/{user_id}/",
+    summary="View a user's cart",
+    description=(
+        "Returns the contents of any user's cart for analysis or "
+        "troubleshooting. Moderator or administrator access required."
+    ),
+    response_model=CartResponseSchema,
+    status_code=200,
+    responses={
+        404: {
+            "description": "User not found",
+            "content": {
+                "application/json": {"example": {"detail": "User not found"}}
+            },
+        },
+    },
+)
+async def moderator_get_cart(
+    user_id: int,
+    user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    current_user = await db.scalar(
+        select(UserModel).where(UserModel.id == user_id)
+    )
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return await build_cart_response(user_id, db)
