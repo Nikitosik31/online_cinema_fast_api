@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -217,5 +217,31 @@ async def remove_item(
         raise HTTPException(status_code=404, detail="Movie is not in the cart")
 
     await db.delete(item)
+    await db.commit()
+    return
+
+
+@router.delete(
+    "/",
+    summary="Clear the cart",
+    description=(
+        "Removes all movies from the current user's cart. Clearing an "
+        "empty cart is not an error. Authentication required."
+    ),
+    status_code=204,
+)
+async def clear_cart(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    user_cart = await db.scalar(
+        select(CartModel).where(CartModel.user_id == current_user.id)
+    )
+    if not user_cart:
+        return
+
+    await db.execute(
+        delete(CartItemModel).where(CartItemModel.cart_id == user_cart.id)
+    )
     await db.commit()
     return
