@@ -174,3 +174,6 @@ class TestAddToCart:
             },
         )
         assert res.status_code == 422
+
+class TestGetCart:
+
