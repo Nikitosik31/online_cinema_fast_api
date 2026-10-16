@@ -18,12 +18,14 @@ class CartModel(Base):
 class CartItemModel(Base):
     __tablename__ = "cart_items"
     __table_args__ = (
-        UniqueConstraint("user_id", "model_id", name="unique_cart_item"),
+        UniqueConstraint("cart_id", "movie_id", name="unique_cart_item"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     cart_id: Mapped[int] = mapped_column(
-        ForeignKey("cards.id", ondelete="CASCADE"), index=True
+        ForeignKey("carts.id", ondelete="CASCADE"), index=True
     )
-    movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"), index=True)
-    added_at: Mapped[int] = mapped_column(default=datetime.now)
+    movie_id: Mapped[int] = mapped_column(
+        ForeignKey("movies.id", ondelete="CASCADE"), index=True
+    )
+    added_at: Mapped[datetime] = mapped_column(default=datetime.now)
