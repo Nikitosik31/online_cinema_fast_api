@@ -1,13 +1,21 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
 from database.models.cart import CartModel, CartItemModel
 from database.models.movies import MovieModel
 from schemas.accounts import MessageResponseSchema
-from schemas.cart import CartItemAddRequestSchema
+from schemas.cart import (
+    CartItemAddRequestSchema,
+    CartResponseSchema,
+    CartItemResponseSchema,
+)
+from schemas.movies import GenreResponseSchema
 from security.dependencies import get_current_user
 
 router = APIRouter(
@@ -109,3 +117,61 @@ async def add_item_to_cart(
     db.add(add_movie_in_cart)
     await db.commit()
     return MessageResponseSchema(message="Movie added to the cart")
+
+
+@router.get(
+    "/",
+    summary="Get my cart",
+    description=(
+        "Returns the current user's cart with the movies in it (title, "
+        "price, genres, release year), the number of items and the total "
+        "price. If the user has no cart yet, an empty cart is returned. "
+        "Authentication required."
+    ),
+    response_model=CartResponseSchema,
+    status_code=200,
+)
+async def get_cart(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    user_cart = await db.scalar(
+        select(CartModel).where(CartModel.user_id == current_user.id)
+    )
+    if not user_cart:
+        return CartResponseSchema(
+            items=[],
+            total_items=0,
+            total_price=Decimal("0"),
+        )
+
+    stmt = await db.execute(
+        select(CartItemModel, MovieModel)
+        .join(MovieModel, MovieModel.id == CartItemModel.movie_id)
+        .where(CartItemModel.cart_id == user_cart.id)
+        .options(selectinload(MovieModel.genres))
+        .order_by(CartItemModel.added_at.asc())
+    )
+    rows = stmt.all()
+
+    items = [
+        CartItemResponseSchema(
+            movie_id=movie.id,
+            name=movie.name,
+            price=movie.price,
+            year=movie.year,
+            genres=[
+                GenreResponseSchema.model_validate(g) for g in movie.genres
+            ],
+            added_at=item.added_at,
+        )
+        for item, movie in rows
+    ]
+    total_items = len(items)
+    total_price = sum((item.price for item in items), Decimal("0"))
+
+    return CartResponseSchema(
+        items=items,
+        total_items=total_items,
+        total_price=total_price,
+    )
