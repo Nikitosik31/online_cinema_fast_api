@@ -258,3 +258,108 @@ class TestGetCart:
             "/cart/",
         )
         assert res.status_code == 401
+
+
+class TestRemoveFromCart:
+    async def test_remove_movie_from_cart_returns_204(
+        self, client, create_movie, create_cart_item, active_user_with_token
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        await create_cart_item(active_user_with_token["id"], movie_1["id"])
+
+        res = await client.delete(
+            f"/cart/items/{movie_1['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 204
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            cart = await db.scalar(
+                select(CartModel).where(
+                    CartModel.user_id == active_user_with_token["id"]
+                )
+            )
+            assert cart is not None
+
+            stmt = await db.scalars(
+                select(CartItemModel).where(CartItemModel.cart_id == cart.id)
+            )
+            items = stmt.all()
+
+            assert len(items) == 0
+
+    async def test_remove_movie_not_in_cart_returns_404(
+        self, client, create_movie, create_cart_item, active_user_with_token
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        await create_cart_item(active_user_with_token["id"], movie_1["id"])
+        res = await client.delete(
+            f"/cart/items/99999/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_remove_movie_does_not_touch_other_users_cart(
+        self,
+        client,
+        create_movie,
+        create_cart_item,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        movie_2 = await create_movie("Movie2", price=250)
+        await create_cart_item(active_user_with_token["id"], movie_1["id"])
+        await create_cart_item(moderator_user["id"], movie_2["id"])
+
+        res = await client.delete(
+            f"/cart/items/{movie_1['id']}/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 204
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            cart_user = await db.scalar(
+                select(CartModel).where(
+                    CartModel.user_id == active_user_with_token["id"]
+                )
+            )
+            assert cart_user is not None
+
+            stmt = await db.scalars(
+                select(CartItemModel).where(
+                    CartItemModel.cart_id == cart_user.id
+                )
+            )
+            items_users = stmt.all()
+            assert len(items_users) == 0
+
+            cart_other_user = await db.scalar(
+                select(CartModel).where(
+                    CartModel.user_id == moderator_user["id"]
+                )
+            )
+            assert cart_other_user is not None
+
+            stmt = await db.scalars(
+                select(CartItemModel).where(
+                    CartItemModel.cart_id == cart_other_user.id
+                )
+            )
+            items_other_users = stmt.all()
+            assert len(items_other_users) == 1
+
+    async def test_remove_movie_from_cart_without_token_returns_401(
+        self, client, create_movie, create_cart_item, active_user_with_token
+    ):
+        movie_1 = await create_movie("Movie", price=150)
+        await create_cart_item(active_user_with_token["id"], movie_1["id"])
+        res = await client.delete(
+            f"/cart/items/{movie_1['id']}/",
+        )
+        assert res.status_code == 401

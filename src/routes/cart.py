@@ -175,3 +175,47 @@ async def get_cart(
         total_items=total_items,
         total_price=total_price,
     )
+
+
+@router.delete(
+    "/items/{movie_id}/",
+    summary="Remove a movie from the cart",
+    description=(
+        "Removes the movie from the current user's cart. "
+        "Authentication required."
+    ),
+    status_code=204,
+    responses={
+        404: {
+            "description": "The movie is not in the user's cart",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Movie is not in the cart"}
+                }
+            },
+        },
+    },
+)
+async def remove_item(
+    movie_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    user_cart = await db.scalar(
+        select(CartModel).where(CartModel.user_id == current_user.id)
+    )
+    if not user_cart:
+        raise HTTPException(status_code=404, detail="Movie is not in the cart")
+
+    item = await db.scalar(
+        select(CartItemModel).where(
+            CartItemModel.movie_id == movie_id,
+            CartItemModel.cart_id == user_cart.id,
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Movie is not in the cart")
+
+    await db.delete(item)
+    await db.commit()
+    return
