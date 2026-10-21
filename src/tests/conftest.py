@@ -18,6 +18,7 @@ from database.models.accounts import (
 )
 from httpx import AsyncClient, ASGITransport
 
+from database.models.cart import CartModel, CartItemModel
 from database.models.interactions import CommentModel, NotificationModel
 from database.models.movies import CertificationEnum, CertificationModel
 from main import app
@@ -434,6 +435,43 @@ async def create_notification():
                 "is_read": notification.is_read,
                 "created_at": notification.created_at,
             }
+
+    return _create
+
+
+@pytest.fixture
+async def create_cart_item():
+    async def _create(
+        user_id,
+        movie_id,
+        added_at=None,
+    ):
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            user_cart = await session.scalar(
+                select(CartModel).where(CartModel.user_id == user_id)
+            )
+            if not user_cart:
+                user_cart = CartModel(user_id=user_id)
+                session.add(user_cart)
+                await session.flush()
+
+            kwargs = {"cart_id": user_cart.id, "movie_id": movie_id}
+            if added_at is not None:
+                kwargs["added_at"] = added_at
+
+            cart_items = CartItemModel(**kwargs)
+            session.add(cart_items)
+            await session.commit()
+            await session.refresh(cart_items)
+
+        return {
+            "id": cart_items.id,
+            "cart_id": user_cart.id,
+            "user_id": user_id,
+            "movie_id": movie_id,
+            "added_at": cart_items.added_at,
+        }
 
     return _create
 
