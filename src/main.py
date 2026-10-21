@@ -5,11 +5,14 @@ from fastapi import FastAPI
 from database.database import seed_db
 from routes import (
     accounts_router,
-    admin_router,
     movies_router,
-    moderator_movies_router,
     cart_router,
     orders_router,
+)
+from routes.staff import (
+    admin_router,
+    moderator_movies_router,
+    moderator_router,
 )
 from routes.interactions import (
     favorites_router,
@@ -31,6 +34,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(accounts_router)
 app.include_router(admin_router)
 app.include_router(moderator_movies_router)
+app.include_router(moderator_router)
 app.include_router(favorites_router)
 app.include_router(movies_router)
 app.include_router(reactions_router)
