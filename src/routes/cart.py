@@ -9,6 +9,7 @@ from database.database import get_postgresql_db
 from database.models.accounts import UserModel
 from database.models.cart import CartModel, CartItemModel
 from database.models.movies import MovieModel
+from database.models.orders import OrderStatusEnum, OrderItemModel, OrderModel
 from schemas.accounts import MessageResponseSchema
 from schemas.cart import (
     CartItemAddRequestSchema,
@@ -39,7 +40,8 @@ router = APIRouter(
     description=(
         "Adds a movie to the current user's cart. The cart is created "
         "automatically on the first addition. A movie can be added only "
-        "once and only if it has a price. Authentication required."
+        "once, only if it has a price and only if the user has not "
+        "purchased it yet. Authentication required."
     ),
     response_model=MessageResponseSchema,
     status_code=201,
@@ -63,10 +65,26 @@ router = APIRouter(
             },
         },
         409: {
-            "description": "The movie is already in the cart",
+            "description": (
+                "The movie is already in the cart or has already been "
+                "purchased"
+            ),
             "content": {
                 "application/json": {
-                    "example": {"detail": "Movie is already in the cart"}
+                    "examples": {
+                        "already_in_cart": {
+                            "summary": "Movie is already in the cart",
+                            "value": {
+                                "detail": "Movie is already in the cart"
+                            },
+                        },
+                        "already_purchased": {
+                            "summary": "Movie has already been purchased",
+                            "value": {
+                                "detail": "Movie has already been purchased"
+                            },
+                        },
+                    }
                 }
             },
         },
@@ -89,6 +107,18 @@ async def add_item_to_cart(
         raise HTTPException(
             status_code=400, detail="This movie is not available for purchase"
         )
+
+    paid_order = await db.scalar(
+        select(OrderItemModel.id)
+        .join(OrderModel, OrderModel.id == OrderItemModel.order_id)
+        .where(
+            OrderModel.user_id == current_user.id,
+            OrderModel.status == OrderStatusEnum.PAID,
+            OrderItemModel.movie_id == movie_data.movie_id,
+        )
+    )
+    if paid_order is not None:
+        raise HTTPException(409, "Movie has already been purchased")
 
     user_cart = await db.scalar(
         select(CartModel).where(CartModel.user_id == current_user.id)

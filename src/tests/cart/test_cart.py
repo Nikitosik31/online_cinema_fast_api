@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from database.models.cart import CartItemModel, CartModel
 from tests.conftest import test_AsyncPostgresqlSessionLocal
+from database.models.orders import OrderStatusEnum
 
 
 class TestAddToCart:
@@ -174,6 +175,62 @@ class TestAddToCart:
             },
         )
         assert res.status_code == 422
+
+    async def test_add_purchased_movie_to_cart_returns_409(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            status=OrderStatusEnum.PAID,
+        )
+
+        res = await client.post(
+            "/cart/items/",
+            json={"movie_id": movie["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 409
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            cart = await db.scalar(
+                select(CartModel).where(
+                    CartModel.user_id == active_user_with_token["id"]
+                )
+            )
+            if cart is not None:
+                result = await db.scalars(
+                    select(CartItemModel).where(
+                        CartItemModel.cart_id == cart.id
+                    )
+                )
+                assert result.all() == []
+
+    async def test_add_movie_from_pending_order_to_cart_returns_201(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(active_user_with_token["id"], [(movie["id"], 100)])
+
+        res = await client.post(
+            "/cart/items/",
+            json={"movie_id": movie["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 201
 
 
 class TestGetCart:
