@@ -182,38 +182,17 @@ async def create_order(
     )
 
 
-@router.get(
-    "/",
-    summary="List my orders",
-    description=(
-        "Returns a paginated list of the current user's orders (newest "
-        "first) with their movies, total amount and status. "
-        "Authentication required."
-    ),
-    response_model=OrderListResponseSchema,
-    status_code=200,
-)
-async def list_orders(
-    page: int = Query(1, ge=1, description="Page number (1-based index)"),
-    per_page: int = Query(
-        10,
-        ge=1,
-        le=20,
-        description="Number of items per page (max 20)",
-    ),
-    current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_postgresql_db),
-):
+async def build_orders_response(
+    filters, page, per_page, db, link_prefix, extra_query=""
+) -> OrderListResponseSchema:
     count_result = await db.execute(
-        select(func.count())
-        .select_from(OrderModel)
-        .where(OrderModel.user_id == current_user.id)
+        select(func.count()).select_from(OrderModel).where(*filters)
     )
     total_items = count_result.scalar() or 0
 
     stmt = await db.scalars(
         select(OrderModel)
-        .where(OrderModel.user_id == current_user.id)
+        .where(*filters)
         .order_by(OrderModel.created_at.desc(), OrderModel.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -253,17 +232,45 @@ async def list_orders(
             for order in orders
         ],
         prev_page=(
-            f"/orders/?page={prev_page_number}&per_page={per_page}"
+            f"{link_prefix}?page={prev_page_number}&per_page={per_page}{extra_query}"
             if prev_page_number >= 1
             else None
         ),
         next_page=(
-            f"/orders/?page={page + 1}&per_page={per_page}"
+            f"{link_prefix}?page={page + 1}&per_page={per_page}{extra_query}"
             if page < total_pages
             else None
         ),
         total_pages=total_pages,
         total_items=total_items,
+    )
+
+
+@router.get(
+    "/",
+    summary="List my orders",
+    description=(
+        "Returns a paginated list of the current user's orders (newest "
+        "first) with their movies, total amount and status. "
+        "Authentication required."
+    ),
+    response_model=OrderListResponseSchema,
+    status_code=200,
+)
+async def list_orders(
+    page: int = Query(1, ge=1, description="Page number (1-based index)"),
+    per_page: int = Query(
+        10, ge=1, le=20, description="Number of items per page (max 20)"
+    ),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    return await build_orders_response(
+        [OrderModel.user_id == current_user.id],
+        page,
+        per_page,
+        db,
+        "/orders/",
     )
 
 
