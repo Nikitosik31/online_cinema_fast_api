@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
@@ -21,6 +22,7 @@ from httpx import AsyncClient, ASGITransport
 from database.models.cart import CartModel, CartItemModel
 from database.models.interactions import CommentModel, NotificationModel
 from database.models.movies import CertificationEnum, CertificationModel
+from database.models.orders import OrderItemModel, OrderModel, OrderStatusEnum
 from main import app
 from database.database import get_postgresql_db
 from security import passwords
@@ -472,6 +474,60 @@ async def create_cart_item():
             "movie_id": movie_id,
             "added_at": cart_items.added_at,
         }
+
+    return _create
+
+
+@pytest.fixture
+async def create_order():
+    async def _create(
+        user_id,
+        movies,
+        status=OrderStatusEnum.PENDING,
+        created_at=None,
+    ):
+        total = sum((Decimal(str(price)) for _, price in movies), Decimal("0"))
+
+        kwargs = {
+            "user_id": user_id,
+            "status": status,
+            "total_amount": total,
+        }
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            order = OrderModel(**kwargs)
+            session.add(order)
+            await session.flush()
+
+            items = []
+            for movie_id, price in movies:
+                item = OrderItemModel(
+                    order_id=order.id,
+                    movie_id=movie_id,
+                    price_at_order=Decimal(str(price)),
+                )
+                session.add(item)
+                items.append(item)
+
+            await session.commit()
+            await session.refresh(order)
+
+            return {
+                "id": order.id,
+                "user_id": order.user_id,
+                "status": order.status,
+                "total_amount": order.total_amount,
+                "created_at": order.created_at,
+                "items": [
+                    {
+                        "movie_id": movie_id,
+                        "price_at_order": Decimal(str(price)),
+                    }
+                    for movie_id, price in movies
+                ],
+            }
 
     return _create
 

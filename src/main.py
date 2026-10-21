@@ -9,6 +9,7 @@ from routes import (
     movies_router,
     moderator_movies_router,
     cart_router,
+    orders_router,
 )
 from routes.interactions import (
     favorites_router,
@@ -37,3 +38,4 @@ app.include_router(ratings_router)
 app.include_router(comments_router)
 app.include_router(notifications_router)
 app.include_router(cart_router)
+app.include_router(orders_router)
