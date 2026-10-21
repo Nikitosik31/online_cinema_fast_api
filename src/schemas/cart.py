@@ -22,6 +22,13 @@ class CartItemResponseSchema(BaseModel):
 
 
 class CartResponseSchema(BaseModel):
+    """
+    The contents of a cart.
+
+    `total_price` is the sum of the item prices. Prices are returned as
+    strings, for example "9.99". An empty cart is returned as an empty list.
+    """
+
     items: list[CartItemResponseSchema]
     total_items: int
     total_price: Decimal

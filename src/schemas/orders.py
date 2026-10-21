@@ -8,12 +8,21 @@ from database.models.orders import OrderStatusEnum
 
 
 class ExcludedMovieSchema(BaseModel):
+    """
+    A movie from the cart that was left out of the order.
+
+    `reason` is "no price" (the movie is not for sale) or
+    "already purchased".
+    """
+
     movie_id: int
     name: str
     reason: str
 
 
 class OrderItemResponseSchema(BaseModel):
+    """A movie in an order, with the price at the time the order was placed."""
+
     movie_id: int
     name: str
     price_at_order: decimal.Decimal
@@ -32,6 +41,8 @@ class OrderResponseSchema(BaseModel):
 
 
 class OrderCreateResponseSchema(BaseModel):
+    """The created order and the cart movies that could not be included in it."""
+
     order: OrderResponseSchema
     excluded_movies: list[ExcludedMovieSchema]
 

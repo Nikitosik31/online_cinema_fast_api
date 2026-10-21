@@ -4,6 +4,13 @@ from database.validators.accounts import validate_password_strength
 
 
 class UserRegistrationRequestSchema(BaseModel):
+    """
+    Data for registering a new account.
+
+    The password must be at least 8 characters long and contain an uppercase
+    letter, a lowercase letter, a digit and a special character (@ $ ! % * ? # &).
+    """
+
     email: EmailStr
     password: str
 
@@ -36,6 +43,13 @@ class UserLoginRequestSchema(BaseModel):
 
 
 class UserLoginResponseSchema(BaseModel):
+    """
+    Tokens issued after a successful login.
+
+    Send `access_token` in the `Authorization: Bearer` header. When it
+    expires, exchange `refresh_token` for a new one.
+    """
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -54,6 +68,11 @@ class TokenRefreshResponseSchema(BaseModel):
 
 
 class UserChangePasswordRequestSchema(BaseModel):
+    """
+    Old password for confirmation and the new one
+    (must meet the same strength rules as at registration).
+    """
+
     old_password: str
     new_password: str
 
@@ -68,6 +87,11 @@ class UserResetPasswordRequestSchema(BaseModel):
 
 
 class UserPasswordResetConfirmRequestSchema(BaseModel):
+    """
+    The token from the reset email and the new password
+    (must meet the same strength rules as at registration).
+    """
+
     token: str
     new_password: str
 
