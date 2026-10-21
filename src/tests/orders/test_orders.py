@@ -493,3 +493,142 @@ class TestCancelOrder:
         )
         res = await client.post(f"/orders/{order['id']}/cancel/")
         assert res.status_code == 401
+
+
+class TestModeratorListOrders:
+    async def test_moderator_lists_all_orders(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_a = await create_movie("MovieA", price=100)
+        movie_b = await create_movie("MovieB", price=200)
+        order_user = await create_order(
+            active_user_with_token["id"], [(movie_a["id"], 100)]
+        )
+        order_moderator = await create_order(
+            moderator_user["id"], [(movie_b["id"], 200)]
+        )
+
+        res = await client.get(
+            "/moderator/orders/",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert {o["id"] for o in data["orders"]} == {
+            order_user["id"],
+            order_moderator["id"],
+        }
+        assert data["total_items"] == 2
+
+    async def test_moderator_filters_orders_by_user(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie", price=100)
+        order_user = await create_order(
+            active_user_with_token["id"], [(movie["id"], 100)]
+        )
+        await create_order(moderator_user["id"], [(movie["id"], 100)])
+
+        res = await client.get(
+            f"/moderator/orders/?user_id={active_user_with_token['id']}",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert [o["id"] for o in data["orders"]] == [order_user["id"]]
+        assert data["total_items"] == 1
+
+    async def test_moderator_filters_orders_by_status(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_a = await create_movie("MovieA", price=100)
+        movie_b = await create_movie("MovieB", price=200)
+        await create_order(
+            active_user_with_token["id"], [(movie_a["id"], 100)]
+        )
+        paid = await create_order(
+            active_user_with_token["id"],
+            [(movie_b["id"], 200)],
+            status=OrderStatusEnum.PAID,
+        )
+
+        res = await client.get(
+            "/moderator/orders/?status=paid",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert [o["id"] for o in data["orders"]] == [paid["id"]]
+
+    async def test_moderator_filters_orders_by_date(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            created_at=datetime(2024, 1, 1),
+        )
+        middle = await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            created_at=datetime(2024, 1, 5),
+        )
+        await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            created_at=datetime(2024, 1, 10),
+        )
+
+        res = await client.get(
+            "/moderator/orders/?date_from=2024-01-03&date_to=2024-01-08",
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert [o["id"] for o in data["orders"]] == [middle["id"]]
+
+    async def test_regular_user_cannot_list_all_orders_returns_403(
+        self, client, active_user_with_token
+    ):
+        res = await client.get(
+            "/moderator/orders/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 403
+
+    async def test_moderator_list_orders_without_token_returns_401(
+        self, client
+    ):
+        res = await client.get("/moderator/orders/")
+        assert res.status_code == 401
