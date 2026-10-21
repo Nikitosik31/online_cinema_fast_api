@@ -1,3 +1,5 @@
+"""Abstract interface for the JWT manager (allows swapping the implementation in tests)."""
+
 from abc import ABC, abstractmethod
 from datetime import timedelta
 
@@ -10,7 +12,7 @@ class JWTAuthManagerInterface(ABC):
 
     @abstractmethod
     def create_access_token(
-        self, data: dict, expires_delta: timedelta = None
+        self, data: dict, expires_delta: timedelta | None = None
     ) -> str:
         """
         Create a new access token.

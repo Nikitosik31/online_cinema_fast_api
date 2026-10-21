@@ -21,6 +21,7 @@ from security.dependencies import get_current_user, require_moderator
 
 router = APIRouter(
     prefix="/cart",
+    tags=["Cart"],
     responses={
         401: {
             "description": "Not authenticated or invalid/expired token.",
@@ -152,6 +153,22 @@ async def add_item_to_cart(
 async def build_cart_response(
     user_id: int, db: AsyncSession
 ) -> CartResponseSchema:
+    """
+    Build the cart view for a user.
+
+    Shared by the user's own cart endpoint and the moderator endpoint. If the
+    user has no cart yet, an empty cart is returned and nothing is created.
+    Items are ordered by the time they were added (oldest first).
+
+    Args:
+        user_id (int): The cart owner.
+        db (AsyncSession): Database session.
+
+    Returns:
+        CartResponseSchema: Items (title, price, year, genres), their count
+            and the total price.
+    """
+
     user_cart = await db.scalar(
         select(CartModel).where(CartModel.user_id == user_id)
     )

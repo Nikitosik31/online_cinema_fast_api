@@ -25,6 +25,7 @@ from security.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/movies",
+    tags=["Comments"],
 )
 
 UNAUTHORIZED_RESPONSE = {
@@ -212,7 +213,9 @@ async def list_comments(
         for comment_id, reaction_type, count in counts_result.all():
             counts_by_comment.setdefault(comment_id, {})[reaction_type] = count
 
-    def get_counts(comment_id):
+    def get_counts(comment_id: int) -> dict[str, int]:
+        """Return the likes and dislikes counts for a comment, 0 when it has no reactions."""
+
         counts = counts_by_comment.get(comment_id, {})
         return {
             "likes_count": counts.get(ReactionTypeEnum.LIKE, 0),

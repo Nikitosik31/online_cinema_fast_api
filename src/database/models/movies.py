@@ -115,6 +115,15 @@ class CertificationModel(Base):
 
 
 class MovieModel(Base):
+    """
+    A movie in the catalog.
+
+    A movie is identified by name, year and runtime together
+    (`uq_movie_name_year_time`), so remakes with the same title are allowed.
+    `price` is None when the movie is not available for purchase; such a
+    movie cannot be added to the cart.
+    """
+
     __tablename__ = "movies"
     __table_args__ = (
         UniqueConstraint(

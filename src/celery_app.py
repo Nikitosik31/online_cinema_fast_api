@@ -1,3 +1,5 @@
+"""Celery application and the periodic task schedule."""
+
 from celery import Celery
 from celery.schedules import crontab
 

@@ -26,7 +26,7 @@ from schemas.movies import (
     MovieListItemResponseSchema,
 )
 
-router = APIRouter(prefix="/movies")
+router = APIRouter(prefix="/movies", tags=["Movies"])
 
 
 @router.get(

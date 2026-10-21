@@ -15,6 +15,7 @@ from security.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/movies",
+    tags=["Reactions"],
     responses={
         401: {
             "description": "Not authenticated or invalid/expired token.",

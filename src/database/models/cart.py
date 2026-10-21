@@ -16,6 +16,13 @@ class CartModel(Base):
 
 
 class CartItemModel(Base):
+    """
+    A movie placed in a cart (a movie can be in a cart only once).
+
+    If the movie is deleted from the catalog, it silently disappears from
+    all carts (`ondelete="CASCADE"`).
+    """
+
     __tablename__ = "cart_items"
     __table_args__ = (
         UniqueConstraint("cart_id", "movie_id", name="unique_cart_item"),

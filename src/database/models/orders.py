@@ -15,6 +15,15 @@ class OrderStatusEnum(StrEnum):
 
 
 class OrderModel(Base):
+    """
+    An order created from the movies in a user's cart.
+
+    Starts as `pending`; becomes `paid` after payment or `canceled` if the
+    user cancels it first. `total_amount` is fixed at creation and does not
+    change when movie prices change later. The cart is cleared only after
+    payment, not when the order is created.
+    """
+
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -29,6 +38,14 @@ class OrderModel(Base):
 
 
 class OrderItemModel(Base):
+    """
+    One movie in an order.
+
+    `price_at_order` is a copy of the price at the time of ordering, so
+    history stays correct when the price changes. A movie that appears in any
+    order cannot be deleted from the catalog (`ondelete="RESTRICT"`).
+    """
+
     __tablename__ = "order_items"
     __table_args__ = (
         UniqueConstraint("order_id", "movie_id", name="unique_order_item"),
