@@ -251,35 +251,3 @@ async def clear_cart(
     )
     await db.commit()
     return
-
-
-@router.get(
-    "/moderator/{user_id}/",
-    summary="View a user's cart",
-    description=(
-        "Returns the contents of any user's cart for analysis or "
-        "troubleshooting. Moderator or administrator access required."
-    ),
-    response_model=CartResponseSchema,
-    status_code=200,
-    responses={
-        404: {
-            "description": "User not found",
-            "content": {
-                "application/json": {"example": {"detail": "User not found"}}
-            },
-        },
-    },
-)
-async def moderator_get_cart(
-    user_id: int,
-    user: UserModel = Depends(require_moderator),
-    db: AsyncSession = Depends(get_postgresql_db),
-):
-    current_user = await db.scalar(
-        select(UserModel).where(UserModel.id == user_id)
-    )
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return await build_cart_response(user_id, db)

@@ -481,7 +481,7 @@ class TestAdminGetCart:
         movie_1 = await create_movie("Movie", price=150)
         await create_cart_item(active_user_with_token["id"], movie_1["id"])
         res = await client.get(
-            f"/cart/moderator/{active_user_with_token['id']}/",
+            f"/moderator/carts/{active_user_with_token['id']}/",
             headers={
                 "Authorization": f"Bearer {moderator_user['access_token']}"
             },
@@ -503,7 +503,7 @@ class TestAdminGetCart:
         movie_1 = await create_movie("Movie", price=150)
         await create_cart_item(moderator_user["id"], movie_1["id"])
         res = await client.get(
-            f"/cart/moderator/{moderator_user['id']}/",
+            f"/moderator/carts/{moderator_user['id']}/",
             headers={
                 "Authorization": f"Bearer {active_user_with_token['access_token']}"
             },
@@ -514,7 +514,7 @@ class TestAdminGetCart:
         self, client, create_movie, moderator_user
     ):
         res = await client.get(
-            f"/cart/moderator/99999/",
+            f"/moderator/carts/99999/",
             headers={
                 "Authorization": f"Bearer {moderator_user['access_token']}"
             },
@@ -523,6 +523,6 @@ class TestAdminGetCart:
 
     async def test_admin_view_cart_without_token_returns_401(self, client):
         res = await client.get(
-            "/cart/moderator/1/",
+            "/moderator/carts/1/",
         )
         assert res.status_code == 401
