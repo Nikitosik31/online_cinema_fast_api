@@ -265,3 +265,77 @@ async def list_orders(
         total_pages=total_pages,
         total_items=total_items,
     )
+
+
+@router.post(
+    "/{order_id}/cancel/",
+    summary="Cancel an order",
+    description=(
+        "Cancels the current user's pending order. A paid order cannot be "
+        "canceled this way: it can only be returned via a refund request. "
+        "Authentication required."
+    ),
+    response_model=OrderResponseSchema,
+    status_code=200,
+    responses={
+        404: {
+            "description": "Order not found",
+            "content": {
+                "application/json": {"example": {"detail": "Order not found"}}
+            },
+        },
+        409: {
+            "description": "Only pending orders can be canceled",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Only pending orders can be canceled"
+                    }
+                }
+            },
+        },
+    },
+)
+async def cancel_order(
+    order_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    user_order = await db.scalar(
+        select(OrderModel).where(
+            OrderModel.user_id == current_user.id, OrderModel.id == order_id
+        )
+    )
+    if not user_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if user_order.status != OrderStatusEnum.PENDING:
+        raise HTTPException(
+            status_code=409, detail="Only pending orders can be canceled"
+        )
+
+    user_order.status = OrderStatusEnum.CANCELED
+    await db.commit()
+    await db.refresh(user_order)
+
+    result = await db.execute(
+        select(OrderItemModel, MovieModel)
+        .join(MovieModel, MovieModel.id == OrderItemModel.movie_id)
+        .where(OrderItemModel.order_id == user_order.id)
+    )
+    items = [
+        OrderItemResponseSchema(
+            movie_id=movie.id,
+            name=movie.name,
+            price_at_order=item.price_at_order,
+        )
+        for item, movie in result.all()
+    ]
+
+    return OrderResponseSchema(
+        id=user_order.id,
+        created_at=user_order.created_at,
+        status=user_order.status,
+        total_amount=user_order.total_amount,
+        items=items,
+    )

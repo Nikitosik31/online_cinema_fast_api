@@ -380,3 +380,116 @@ class TestListOrders:
     async def test_list_orders_without_token_returns_401(self, client):
         res = await client.get("/orders/")
         assert res.status_code == 401
+
+
+class TestCancelOrder:
+    async def test_cancel_pending_order_returns_200(
+        self, client, create_movie, create_order, active_user_with_token
+    ):
+        movie = await create_movie("Movie", price=100)
+        order = await create_order(
+            active_user_with_token["id"], [(movie["id"], 100)]
+        )
+
+        res = await client.post(
+            f"/orders/{order['id']}/cancel/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        assert res.json()["status"] == "canceled"
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            db_order = await db.scalar(
+                select(OrderModel).where(OrderModel.id == order["id"])
+            )
+            assert db_order.status == OrderStatusEnum.CANCELED
+
+    async def test_cancel_paid_order_returns_409(
+        self, client, create_movie, create_order, active_user_with_token
+    ):
+        movie = await create_movie("Movie", price=100)
+        order = await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            status=OrderStatusEnum.PAID,
+        )
+
+        res = await client.post(
+            f"/orders/{order['id']}/cancel/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 409
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            db_order = await db.scalar(
+                select(OrderModel).where(OrderModel.id == order["id"])
+            )
+            assert db_order.status == OrderStatusEnum.PAID
+
+    async def test_cancel_already_canceled_order_returns_409(
+        self, client, create_movie, create_order, active_user_with_token
+    ):
+        movie = await create_movie("Movie", price=100)
+        order = await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            status=OrderStatusEnum.CANCELED,
+        )
+
+        res = await client.post(
+            f"/orders/{order['id']}/cancel/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 409
+
+    async def test_cancel_order_not_found_returns_404(
+        self, client, active_user_with_token
+    ):
+        res = await client.post(
+            "/orders/99999/cancel/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+    async def test_cancel_other_users_order_returns_404(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie = await create_movie("Movie", price=100)
+        order = await create_order(moderator_user["id"], [(movie["id"], 100)])
+
+        res = await client.post(
+            f"/orders/{order['id']}/cancel/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 404
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            db_order = await db.scalar(
+                select(OrderModel).where(OrderModel.id == order["id"])
+            )
+            assert db_order.status == OrderStatusEnum.PENDING
+
+    async def test_cancel_order_without_token_returns_401(
+        self, client, create_movie, create_order, active_user_with_token
+    ):
+        movie = await create_movie("Movie", price=100)
+        order = await create_order(
+            active_user_with_token["id"], [(movie["id"], 100)]
+        )
+        res = await client.post(f"/orders/{order['id']}/cancel/")
+        assert res.status_code == 401
