@@ -104,6 +104,14 @@ class PasswordResetTokenModel(Base):
 
 
 class RefreshTokenModel(Base):
+    
+    """
+    A long-lived token used to get a new access token without logging in.
+
+    Unlike access tokens (stateless JWTs), refresh tokens are stored in the
+    database, so they can be revoked (for example on logout).
+    """
+
     __tablename__ = "refresh_tokens"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

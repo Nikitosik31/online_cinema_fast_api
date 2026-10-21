@@ -11,6 +11,7 @@ from security.dependencies import require_admin
 
 router = APIRouter(
     prefix="/admin",
+    tags=["Admin"],
     responses={
         403: {
             "description": "User aren't an admin",

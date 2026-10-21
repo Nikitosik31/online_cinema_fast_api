@@ -41,6 +41,13 @@ class FavoriteMovieModel(Base):
 
 
 class MovieRatingModel(Base):
+    """
+    A user's rating of a movie, from 1 to 10.
+
+    One rating per user and movie: changing it updates the existing row.
+    The range is also enforced by the database (`check_rating_range`).
+    """
+
     __tablename__ = "movie_ratings"
     __table_args__ = (
         UniqueConstraint("user_id", "movie_id", name="unique_movie_ratings"),
@@ -81,6 +88,14 @@ class MovieReactionModel(Base):
 
 
 class CommentModel(Base):
+    """
+    A comment on a movie, or a reply to another comment.
+
+    `parent_id` points to the comment being replied to (None for a top-level
+    comment). Replies are allowed only one level deep. Deleting a comment
+    also deletes its replies, reactions and notifications.
+    """
+
     __tablename__ = "comments"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

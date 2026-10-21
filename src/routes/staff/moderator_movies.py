@@ -25,6 +25,7 @@ from security.dependencies import require_moderator
 
 router = APIRouter(
     prefix="/movies",
+    tags=["Moderator: Movies"],
     responses={
         401: {
             "description": "Not authenticated or invalid/expired token.",

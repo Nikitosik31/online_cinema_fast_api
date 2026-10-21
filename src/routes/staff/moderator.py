@@ -15,7 +15,7 @@ from security.dependencies import require_moderator
 
 router = APIRouter(
     prefix="/moderator",
-    tags=["moderator"],
+    tags=["Moderator: Carts & Orders"],
     dependencies=[Depends(require_moderator)],
     responses={
         401: {

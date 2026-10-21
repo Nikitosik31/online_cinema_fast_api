@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
@@ -20,6 +20,7 @@ from security.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/orders",
+    tags=["Orders"],
     responses={
         401: {
             "description": "Not authenticated or invalid/expired token.",
@@ -183,8 +184,34 @@ async def create_order(
 
 
 async def build_orders_response(
-    filters, page, per_page, db, link_prefix, extra_query=""
+    filters: list[ColumnElement[bool]],
+    page: int,
+    per_page: int,
+    db: AsyncSession,
+    link_prefix: str,
+    extra_query: str = "",
 ) -> OrderListResponseSchema:
+    """
+    Build a paginated list of orders with their items.
+
+    Shared by the user's own order list and the moderator list. Orders are
+    sorted newest first. Item prices are the prices at the time of the order.
+
+    Args:
+        filters (list[ColumnElement[bool]]): SQLAlchemy conditions applied
+            to the orders query.
+        page (int): Page number, starting from 1.
+        per_page (int): Number of orders per page.
+        db (AsyncSession): Database session.
+        link_prefix (str): Path used to build the previous/next page links.
+        extra_query (str): Query string suffix that keeps the active filters
+            in the page links, for example "&status=paid".
+
+    Returns:
+        OrderListResponseSchema: The page of orders and pagination links.
+            A page beyond the last one returns an empty list.
+    """
+
     count_result = await db.execute(
         select(func.count()).select_from(OrderModel).where(*filters)
     )

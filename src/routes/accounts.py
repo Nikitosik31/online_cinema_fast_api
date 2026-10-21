@@ -37,7 +37,7 @@ from security.dependencies import get_current_user
 from security.dependencies import get_jwt_token_manager
 from security.jwt_interfaces import JWTAuthManagerInterface
 
-router = APIRouter()
+router = APIRouter(tags=["Accounts"])
 
 
 @router.post(
