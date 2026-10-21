@@ -1,7 +1,7 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
@@ -14,6 +14,7 @@ from schemas.orders import (
     ExcludedMovieSchema,
     OrderResponseSchema,
     OrderItemResponseSchema,
+    OrderListResponseSchema,
 )
 from security.dependencies import get_current_user
 
@@ -178,4 +179,89 @@ async def create_order(
             ],
         ),
         excluded_movies=excluded_items,
+    )
+
+
+@router.get(
+    "/",
+    summary="List my orders",
+    description=(
+        "Returns a paginated list of the current user's orders (newest "
+        "first) with their movies, total amount and status. "
+        "Authentication required."
+    ),
+    response_model=OrderListResponseSchema,
+    status_code=200,
+)
+async def list_orders(
+    page: int = Query(1, ge=1, description="Page number (1-based index)"),
+    per_page: int = Query(
+        10,
+        ge=1,
+        le=20,
+        description="Number of items per page (max 20)",
+    ),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(OrderModel)
+        .where(OrderModel.user_id == current_user.id)
+    )
+    total_items = count_result.scalar() or 0
+
+    stmt = await db.scalars(
+        select(OrderModel)
+        .where(OrderModel.user_id == current_user.id)
+        .order_by(OrderModel.created_at.desc(), OrderModel.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    orders = stmt.all()
+
+    order_ids = [order.id for order in orders]
+
+    items_by_order = {}
+    if order_ids:
+        result = await db.execute(
+            select(OrderItemModel, MovieModel)
+            .join(MovieModel, MovieModel.id == OrderItemModel.movie_id)
+            .where(OrderItemModel.order_id.in_(order_ids))
+        )
+        for item, movie in result.all():
+            items_by_order.setdefault(item.order_id, []).append(
+                OrderItemResponseSchema(
+                    movie_id=movie.id,
+                    name=movie.name,
+                    price_at_order=item.price_at_order,
+                )
+            )
+
+    total_pages = (total_items + per_page - 1) // per_page
+    prev_page_number = min(page - 1, total_pages)
+
+    return OrderListResponseSchema(
+        orders=[
+            OrderResponseSchema(
+                id=order.id,
+                created_at=order.created_at,
+                status=order.status,
+                total_amount=order.total_amount,
+                items=items_by_order.get(order.id, []),
+            )
+            for order in orders
+        ],
+        prev_page=(
+            f"/orders/?page={prev_page_number}&per_page={per_page}"
+            if prev_page_number >= 1
+            else None
+        ),
+        next_page=(
+            f"/orders/?page={page + 1}&per_page={per_page}"
+            if page < total_pages
+            else None
+        ),
+        total_pages=total_pages,
+        total_items=total_items,
     )

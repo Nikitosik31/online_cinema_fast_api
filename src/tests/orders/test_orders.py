@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from datetime import datetime
 
 from database.models.cart import CartModel, CartItemModel
 from database.models.orders import OrderItemModel, OrderStatusEnum, OrderModel
@@ -219,4 +220,163 @@ class TestCreateOrder:
         movie = await create_movie("Movie1", price=150)
         await create_cart_item(active_user_with_token["id"], movie["id"])
         res = await client.post("/orders/")
+        assert res.status_code == 401
+
+
+class TestListOrders:
+    async def test_list_orders_empty_returns_empty_list(
+        self, client, active_user_with_token
+    ):
+        res = await client.get(
+            "/orders/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["orders"] == []
+        assert data["total_items"] == 0
+        assert data["total_pages"] == 0
+        assert data["prev_page"] is None
+        assert data["next_page"] is None
+
+    async def test_list_orders_returns_my_orders_newest_first(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie_a = await create_movie("MovieA", price=100)
+        movie_b = await create_movie("MovieB", price=200)
+        movie_c = await create_movie("MovieC", price=300)
+
+        older = await create_order(
+            active_user_with_token["id"],
+            [(movie_a["id"], 100), (movie_b["id"], 200)],
+            status=OrderStatusEnum.PAID,
+            created_at=datetime(2024, 1, 1),
+        )
+        newer = await create_order(
+            active_user_with_token["id"],
+            [(movie_c["id"], 300)],
+            created_at=datetime(2024, 1, 3),
+        )
+
+        res = await client.get(
+            "/orders/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert [o["id"] for o in data["orders"]] == [newer["id"], older["id"]]
+        assert data["total_items"] == 2
+
+        by_id = {o["id"]: o for o in data["orders"]}
+        old = by_id[older["id"]]
+        assert old["status"] == "paid"
+        assert float(old["total_amount"]) == 300
+        assert {i["movie_id"] for i in old["items"]} == {
+            movie_a["id"],
+            movie_b["id"],
+        }
+        assert {i["name"] for i in old["items"]} == {"MovieA", "MovieB"}
+
+        new = by_id[newer["id"]]
+        assert new["status"] == "pending"
+        assert float(new["total_amount"]) == 300
+        assert [i["movie_id"] for i in new["items"]] == [movie_c["id"]]
+
+    async def test_list_orders_shows_only_my_orders(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+        moderator_user,
+    ):
+        movie_a = await create_movie("MovieA", price=100)
+        movie_b = await create_movie("MovieB", price=200)
+        mine = await create_order(
+            active_user_with_token["id"], [(movie_a["id"], 100)]
+        )
+        await create_order(moderator_user["id"], [(movie_b["id"], 200)])
+
+        res = await client.get(
+            "/orders/",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert [o["id"] for o in data["orders"]] == [mine["id"]]
+        assert data["total_items"] == 1
+
+    async def test_list_orders_pagination_links(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        for _ in range(5):
+            await create_order(
+                active_user_with_token["id"], [(movie["id"], 100)]
+            )
+        headers = {
+            "Authorization": f"Bearer {active_user_with_token['access_token']}"
+        }
+
+        res1 = await client.get("/orders/?page=1&per_page=2", headers=headers)
+        assert res1.status_code == 200
+        data = res1.json()
+        assert len(data["orders"]) == 2
+        assert data["prev_page"] is None
+        assert data["next_page"] == "/orders/?page=2&per_page=2"
+        assert data["total_pages"] == 3
+        assert data["total_items"] == 5
+
+        res2 = await client.get("/orders/?page=2&per_page=2", headers=headers)
+        data = res2.json()
+        assert len(data["orders"]) == 2
+        assert data["prev_page"] == "/orders/?page=1&per_page=2"
+        assert data["next_page"] == "/orders/?page=3&per_page=2"
+
+        res3 = await client.get("/orders/?page=3&per_page=2", headers=headers)
+        data = res3.json()
+        assert len(data["orders"]) == 1
+        assert data["prev_page"] == "/orders/?page=2&per_page=2"
+        assert data["next_page"] is None
+
+    async def test_list_orders_page_out_of_range_returns_empty_list(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(active_user_with_token["id"], [(movie["id"], 100)])
+
+        res = await client.get(
+            "/orders/?page=99&per_page=2",
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["orders"] == []
+        assert data["total_items"] == 1
+        assert data["total_pages"] == 1
+        assert data["next_page"] is None
+        assert data["prev_page"] == "/orders/?page=1&per_page=2"
+
+    async def test_list_orders_without_token_returns_401(self, client):
+        res = await client.get("/orders/")
         assert res.status_code == 401
