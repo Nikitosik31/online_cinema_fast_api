@@ -9,10 +9,16 @@ from database.models.interactions import ReactionTypeEnum, NotificationTypeEnum
 
 
 class NamedEntityRequestSchema(BaseModel):
+    """Base schema for creating or updating genres and stars:
+    only a name (max 100 characters)."""
+
     name: str = Field(max_length=100)
 
 
 class NamedEntityResponseSchema(BaseModel):
+    """Base schema for genres, stars, directors and certifications:
+    an id and a name."""
+
     id: int
     name: str
 
@@ -44,6 +50,13 @@ class CertificationResponseSchema(NamedEntityResponseSchema):
 
 
 class MovieCreateRequestSchema(BaseModel):
+    """
+    Data for adding a movie to the catalog.
+
+    Genres, directors and stars are passed by name, not by id. `price` is
+    optional: a movie without a price cannot be purchased.
+    """
+
     name: str = Field(max_length=255)
     year: int
     time: int
@@ -71,6 +84,14 @@ class MovieListItemResponseSchema(BaseModel):
 
 
 class MovieListResponseSchema(BaseModel):
+    """
+    One page of the movie catalog.
+
+    `prev_page` and `next_page` are ready-to-use links and are `null` on the
+    first and last page. The same pagination fields are used by the comment,
+    notification and order lists.
+    """
+
     movies: List[MovieListItemResponseSchema]
     prev_page: Optional[str]
     next_page: Optional[str]
@@ -81,6 +102,13 @@ class MovieListResponseSchema(BaseModel):
 
 
 class MovieDetailResponseSchema(BaseModel):
+    """
+    Full information about a movie.
+
+    `average_rating` is `null` until someone rates the movie.
+    `likes_count` and `dislikes_count` count the reactions to the movie.
+    """
+
     id: int
     uuid: UUID
     name: str = Field(max_length=255)
@@ -104,6 +132,8 @@ class MovieDetailResponseSchema(BaseModel):
 
 
 class MovieUpdateRequestSchema(BaseModel):
+    """Partial update of a movie. All fields are optional."""
+
     name: Optional[str] = Field(default=None, max_length=255)
     year: Optional[int] = None
     time: Optional[int] = None
@@ -128,6 +158,8 @@ class GenreWithMovieCountResponseSchema(BaseModel):
 
 
 class MovieRatingRequestSchema(BaseModel):
+    """A rating from 1 to 10."""
+
     rating: int = Field(ge=1, le=10)
 
 
@@ -167,11 +199,25 @@ class CommentReplyResponseSchema(BaseModel):
 
 
 class CommentRequestSchema(BaseModel):
+    """
+    Text of a new comment (1 to 1000 characters).
+
+    Set `parent_id` to reply to another comment. Replies are allowed only
+    one level deep: you cannot reply to a reply.
+    """
+
     content: str = Field(min_length=1, max_length=1000)
     parent_id: int | None = None
 
 
 class CommentResponseSchema(BaseModel):
+    """
+    A comment with its replies and reaction counts.
+
+    `parent_id` is `null` for a top-level comment. `replies` contains the
+    direct replies only.
+    """
+
     id: int
     movie_id: int
     user_id: int
