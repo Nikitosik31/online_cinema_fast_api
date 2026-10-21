@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from database.models.cart import CartItemModel, CartModel
 from tests.conftest import test_AsyncPostgresqlSessionLocal
+from database.models.orders import OrderStatusEnum
 
 
 class TestAddToCart:
@@ -174,6 +175,62 @@ class TestAddToCart:
             },
         )
         assert res.status_code == 422
+
+    async def test_add_purchased_movie_to_cart_returns_409(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(
+            active_user_with_token["id"],
+            [(movie["id"], 100)],
+            status=OrderStatusEnum.PAID,
+        )
+
+        res = await client.post(
+            "/cart/items/",
+            json={"movie_id": movie["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 409
+
+        async with test_AsyncPostgresqlSessionLocal() as db:
+            cart = await db.scalar(
+                select(CartModel).where(
+                    CartModel.user_id == active_user_with_token["id"]
+                )
+            )
+            if cart is not None:
+                result = await db.scalars(
+                    select(CartItemModel).where(
+                        CartItemModel.cart_id == cart.id
+                    )
+                )
+                assert result.all() == []
+
+    async def test_add_movie_from_pending_order_to_cart_returns_201(
+        self,
+        client,
+        create_movie,
+        create_order,
+        active_user_with_token,
+    ):
+        movie = await create_movie("Movie", price=100)
+        await create_order(active_user_with_token["id"], [(movie["id"], 100)])
+
+        res = await client.post(
+            "/cart/items/",
+            json={"movie_id": movie["id"]},
+            headers={
+                "Authorization": f"Bearer {active_user_with_token['access_token']}"
+            },
+        )
+        assert res.status_code == 201
 
 
 class TestGetCart:
@@ -481,7 +538,7 @@ class TestAdminGetCart:
         movie_1 = await create_movie("Movie", price=150)
         await create_cart_item(active_user_with_token["id"], movie_1["id"])
         res = await client.get(
-            f"/cart/moderator/{active_user_with_token['id']}/",
+            f"/moderator/carts/{active_user_with_token['id']}/",
             headers={
                 "Authorization": f"Bearer {moderator_user['access_token']}"
             },
@@ -503,7 +560,7 @@ class TestAdminGetCart:
         movie_1 = await create_movie("Movie", price=150)
         await create_cart_item(moderator_user["id"], movie_1["id"])
         res = await client.get(
-            f"/cart/moderator/{moderator_user['id']}/",
+            f"/moderator/carts/{moderator_user['id']}/",
             headers={
                 "Authorization": f"Bearer {active_user_with_token['access_token']}"
             },
@@ -514,7 +571,7 @@ class TestAdminGetCart:
         self, client, create_movie, moderator_user
     ):
         res = await client.get(
-            f"/cart/moderator/99999/",
+            f"/moderator/carts/99999/",
             headers={
                 "Authorization": f"Bearer {moderator_user['access_token']}"
             },
@@ -523,6 +580,6 @@ class TestAdminGetCart:
 
     async def test_admin_view_cart_without_token_returns_401(self, client):
         res = await client.get(
-            "/cart/moderator/1/",
+            "/moderator/carts/1/",
         )
         assert res.status_code == 401
