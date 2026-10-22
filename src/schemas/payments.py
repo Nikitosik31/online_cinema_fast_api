@@ -33,6 +33,7 @@ class PaymentResponseSchema(BaseModel):
     created_at: datetime
     amount: Decimal
     status: PaymentStatusEnum
+    user_id: int
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -78,7 +78,7 @@ tags_metadata = [
         "description": "Movie catalog management (create, update, delete).",
     },
     {
-        "name": "Moderator: Carts & Orders",
+        "name": "Moderator: Carts, Orders & Payments",
         "description": "Moderator views of users' carts and orders.",
     },
 ]
