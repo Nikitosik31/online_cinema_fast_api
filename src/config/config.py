@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         redis_port (int): Redis port.
         smtp_host (str): SMTP server host used to send emails.
         smtp_port (int): SMTP server port.
+        stripe_secret_key (str): Stripe secret API key (test mode keys start with `sk_test_`).
+        stripe_webhook_secret (str): Secret used to verify that webhook requests come from Stripe.
     """
 
     postgres_db: str
@@ -42,6 +44,9 @@ class Settings(BaseSettings):
 
     smtp_host: str
     smtp_port: int
+
+    stripe_secret_key: str
+    stripe_webhook_secret: str
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 
