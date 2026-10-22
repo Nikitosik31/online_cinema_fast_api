@@ -191,7 +191,11 @@ async def activate_user(
 @router.post(
     "/activate/resend/",
     summary="Resend activation link",
-    description="If user don't activate his account, user will be resent activation link.",
+    description=(
+        "Sends a new activation link to the given email if the account exists "
+        "and is not activated yet. The response is always the same, so it "
+        "cannot be used to find out which emails are registered."
+    ),
     response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
 )
