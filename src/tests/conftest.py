@@ -1,7 +1,9 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -23,6 +25,7 @@ from database.models.cart import CartModel, CartItemModel
 from database.models.interactions import CommentModel, NotificationModel
 from database.models.movies import CertificationEnum, CertificationModel
 from database.models.orders import OrderItemModel, OrderModel, OrderStatusEnum
+from database.models.payments import PaymentModel, PaymentStatusEnum
 from main import app
 from database.database import get_postgresql_db
 from security import passwords
@@ -530,6 +533,81 @@ async def create_order():
             }
 
     return _create
+
+
+@pytest.fixture
+async def create_payment():
+    async def _create(
+        user_id,
+        order_id,
+        amount=100,
+        status=PaymentStatusEnum.SUCCESSFUL,
+        external_payment_id=None,
+        created_at=None,
+    ):
+        kwargs = {
+            "user_id": user_id,
+            "order_id": order_id,
+            "amount": Decimal(str(amount)),
+            "status": status,
+            "external_payment_id": external_payment_id,
+        }
+        if created_at is not None:
+            kwargs["created_at"] = created_at
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            payment = PaymentModel(**kwargs)
+            session.add(payment)
+            await session.commit()
+            await session.refresh(payment)
+
+            return {
+                "id": payment.id,
+                "user_id": payment.user_id,
+                "order_id": payment.order_id,
+                "amount": payment.amount,
+                "status": payment.status,
+                "external_payment_id": payment.external_payment_id,
+                "created_at": payment.created_at,
+            }
+
+    return _create
+
+
+@pytest.fixture(autouse=True)
+def mock_send_payment_email(monkeypatch):
+    mock = AsyncMock()
+    monkeypatch.setattr("routes.payments.send_email", mock)
+    return mock
+
+
+@pytest.fixture
+def mock_stripe_session(monkeypatch):
+    mock = AsyncMock(
+        return_value=SimpleNamespace(url="https://checkout.stripe.test/pay")
+    )
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", mock)
+    return mock
+
+
+@pytest.fixture
+def send_stripe_event(client, monkeypatch):
+    async def _send(event_type, data):
+        event = stripe.StripeObject.construct_from(
+            {"type": event_type, "data": {"object": data}}, "sk_test"
+        )
+        monkeypatch.setattr(
+            stripe.Webhook,
+            "construct_event",
+            lambda payload, sig_header, secret: event,
+        )
+        return await client.post(
+            "/payments/webhook/",
+            content=b"{}",
+            headers={"stripe-signature": "test"},
+        )
+
+    return _send
 
 
 @pytest.fixture(autouse=True)
