@@ -4,8 +4,8 @@ from decimal import Decimal
 import logging
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from sqlalchemy import select, delete
+from fastapi import APIRouter, Depends, HTTPException, Request, Header, Query
+from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
@@ -23,6 +23,8 @@ from schemas.accounts import MessageResponseSchema
 from schemas.payments import (
     PaymentCheckoutResponseSchema,
     PaymentCheckoutRequestSchema,
+    PaymentListResponseSchema,
+    PaymentResponseSchema,
 )
 from security.dependencies import get_current_user
 from config.config import get_settings
@@ -453,3 +455,124 @@ async def stripe_webhook(
         await handle_checkout_expired(event["data"]["object"].to_dict(), db)
 
     return MessageResponseSchema(message="Event received")
+
+
+async def build_payments_response(
+    filters: list[ColumnElement[bool]],
+    page: int,
+    per_page: int,
+    db: AsyncSession,
+    link_prefix: str,
+    extra_query: str = "",
+) -> PaymentListResponseSchema:
+    """
+    Build a paginated list of payments.
+
+    Shared by the user's own payment history and the moderator list.
+    Payments are sorted newest first.
+
+    Args:
+        filters (list[ColumnElement[bool]]): SQLAlchemy conditions applied
+            to the payments query.
+        page (int): Page number, starting from 1.
+        per_page (int): Number of payments per page.
+        db (AsyncSession): Database session.
+        link_prefix (str): Path used to build the previous/next page links.
+        extra_query (str): Query string suffix that keeps the active filters
+            in the page links, for example "&status=successful".
+
+    Returns:
+        PaymentListResponseSchema: The page of payments and pagination links.
+            A page beyond the last one returns an empty list.
+    """
+    total_items = (
+        await db.scalar(
+            select(func.count()).select_from(PaymentModel).where(*filters)
+        )
+        or 0
+    )
+
+    payments = (
+        await db.scalars(
+            select(PaymentModel)
+            .where(*filters)
+            .order_by(PaymentModel.created_at.desc(), PaymentModel.id.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+    ).all()
+
+    total_pages = (total_items + per_page - 1) // per_page
+    prev_page_number = min(page - 1, total_pages)
+
+    return PaymentListResponseSchema(
+        payments=[
+            PaymentResponseSchema.model_validate(payment)
+            for payment in payments
+        ],
+        prev_page=(
+            f"{link_prefix}?page={prev_page_number}&per_page={per_page}{extra_query}"
+            if prev_page_number >= 1
+            else None
+        ),
+        next_page=(
+            f"{link_prefix}?page={page + 1}&per_page={per_page}{extra_query}"
+            if page < total_pages
+            else None
+        ),
+        total_pages=total_pages,
+        total_items=total_items,
+    )
+
+
+@router.get(
+    "/",
+    summary="List my payments",
+    description=(
+        "Returns a paginated list of the current user's payments (newest "
+        "first) with their date and time, amount and status "
+        "(successful, canceled or refunded). Authentication required."
+    ),
+    response_model=PaymentListResponseSchema,
+    status_code=200,
+    responses={
+        401: {
+            "description": "Not authenticated or invalid/expired token.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Token is invalid."}
+                }
+            },
+        },
+    },
+)
+async def list_payments(
+    page: int = Query(1, ge=1, description="Page number (1-based index)"),
+    per_page: int = Query(
+        10, ge=1, le=20, description="Number of items per page (max 20)"
+    ),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    """
+    Return the current user's payment history.
+
+    Only the payments of the authenticated user are returned: the query is
+    filtered by the user id taken from the access token.
+
+    Args:
+        page (int): Page number, starting from 1.
+        per_page (int): Number of payments per page (max 20).
+        current_user (UserModel): The authenticated user (injected).
+        db (AsyncSession): Database session (injected).
+
+    Returns:
+        PaymentListResponseSchema: The page of payments and pagination links.
+    """
+    return await build_payments_response(
+        [PaymentModel.user_id == current_user.id],
+        page,
+        per_page,
+        db,
+        "/payments/",
+    )

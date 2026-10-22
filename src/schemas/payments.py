@@ -1,9 +1,16 @@
 """Pydantic schemas for payments."""
 
-from pydantic import BaseModel
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+from database.models.payments import PaymentStatusEnum
 
 
 class PaymentCheckoutRequestSchema(BaseModel):
+    """Id of the order to pay for. The order must belong to the current user and be pending."""
+
     order_id: int
 
 
@@ -16,3 +23,23 @@ class PaymentCheckoutResponseSchema(BaseModel):
     """
 
     checkout_url: str
+
+
+class PaymentResponseSchema(BaseModel):
+    """A payment with its date and time, amount and status (successful, canceled or refunded)."""
+
+    id: int
+    order_id: int
+    created_at: datetime
+    amount: Decimal
+    status: PaymentStatusEnum
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaymentListResponseSchema(BaseModel):
+    payments: list[PaymentResponseSchema]
+    prev_page: str | None
+    next_page: str | None
+    total_pages: int
+    total_items: int
