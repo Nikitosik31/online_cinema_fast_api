@@ -330,6 +330,55 @@ async def handle_checkout_completed(session: dict, db: AsyncSession) -> None:
         logger.exception("Could not send the payment confirmation email")
 
 
+async def handle_checkout_expired(session: dict, db: AsyncSession) -> None:
+    """
+    Record a canceled payment when a Stripe payment page expires unpaid.
+
+    The user did not pay, so only a payment with the `canceled` status is
+    saved (without payment items), and the order stays pending: the user can
+    try to pay it again. Does nothing (and does not raise) when the event
+    cannot be applied, so that Stripe gets a 200 response: the order is
+    missing or no longer pending (for example, it was paid through another
+    payment page), or this session was already recorded.
+
+    The id of the Stripe session is used as `external_payment_id`, because an
+    unpaid session has no payment intent.
+
+    Args:
+        session (dict): The expired Stripe Checkout Session from the event.
+        db (AsyncSession): Database session.
+    """
+    order_id = session.get("metadata", {}).get("order_id")
+    session_id = session.get("id")
+    if not order_id or not session_id:
+        return
+
+    existing_payment = await db.scalar(
+        select(PaymentModel).where(
+            PaymentModel.external_payment_id == session_id
+        )
+    )
+    if existing_payment:
+        return
+
+    order = await db.scalar(
+        select(OrderModel).where(OrderModel.id == int(order_id))
+    )
+    if not order or order.status != OrderStatusEnum.PENDING:
+        return
+
+    db.add(
+        PaymentModel(
+            user_id=order.user_id,
+            order_id=order.id,
+            amount=order.total_amount,
+            status=PaymentStatusEnum.CANCELED,
+            external_payment_id=session_id,
+        )
+    )
+    await db.commit()
+
+
 @router.post(
     "/webhook/",
     summary="Stripe webhook",
@@ -401,6 +450,6 @@ async def stripe_webhook(
     if event_type == "checkout.session.completed":
         await handle_checkout_completed(event["data"]["object"].to_dict(), db)
     elif event_type == "checkout.session.expired":
-        print("payment expired")
+        await handle_checkout_expired(event["data"]["object"].to_dict(), db)
 
     return MessageResponseSchema(message="Event received")
