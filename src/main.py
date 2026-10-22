@@ -12,6 +12,7 @@ from routes import (
     cart_router,
     orders_router,
     docs_router,
+    payments_router,
 )
 from routes.staff import (
     admin_router,
@@ -141,3 +142,4 @@ app.include_router(notifications_router)
 app.include_router(cart_router)
 app.include_router(orders_router)
 app.include_router(docs_router)
+app.include_router(payments_router)
