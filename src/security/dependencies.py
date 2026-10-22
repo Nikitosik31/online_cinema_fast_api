@@ -1,19 +1,27 @@
 """FastAPI dependencies for authentication and role checks."""
 
 from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import (
+    HTTPBearer,
+    HTTPAuthorizationCredentials,
+    HTTPBasicCredentials,
+    HTTPBasic,
+)
 from pydantic_settings import BaseSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config.config import get_settings
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel, UserGroupModel, UserGroupEnum
 from exceptions.security import TokenExpiredError, InvalidTokenError
+from security.passwords import verify_password
 from security.token_manager import JWTAuthManager
 from security.jwt_interfaces import JWTAuthManagerInterface
 
 security_scheme = HTTPBearer()
+basic_scheme = HTTPBasic()
 
 
 async def get_jwt_token_manager(
@@ -132,3 +140,52 @@ async def require_moderator(
     if group.name not in (UserGroupEnum.MODERATOR, UserGroupEnum.ADMIN):
         raise HTTPException(status_code=403, detail="You are not a moderator")
     return current_user
+
+
+async def get_docs_user(
+    db: AsyncSession = Depends(get_postgresql_db),
+    credentials: HTTPBasicCredentials = Depends(basic_scheme),
+) -> UserModel:
+    """
+    Allow only moderators and administrators to open the API documentation.
+
+    Browsers cannot send a Bearer token when a page is opened by its address,
+    so the documentation uses HTTP Basic authentication: the browser shows a
+    login prompt and sends the email and password with every request.
+
+    Args:
+        db (AsyncSession): Database session (injected).
+        credentials (HTTPBasicCredentials): Email (as the username) and password.
+
+    Returns:
+        UserModel: The authenticated user.
+
+    Raises:
+        HTTPException: 401 if the email or password is wrong or the account is
+            not active, 403 if the user is neither a moderator nor an administrator.
+    """
+
+    user = await db.scalar(
+        select(UserModel)
+        .where(UserModel.email == credentials.username)
+        .options(selectinload(UserModel.group))
+    )
+
+    if (
+        not user
+        or not user.is_active
+        or not verify_password(credentials.password, user.hashed_password)
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    if user.group.name not in (UserGroupEnum.MODERATOR, UserGroupEnum.ADMIN):
+        raise HTTPException(
+            status_code=403,
+            detail="Access to the documentation is allowed only for moderators and administrators",
+        )
+
+    return user
