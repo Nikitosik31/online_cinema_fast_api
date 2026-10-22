@@ -11,6 +11,7 @@ from routes import (
     movies_router,
     cart_router,
     orders_router,
+    docs_router,
 )
 from routes.staff import (
     admin_router,
@@ -122,6 +123,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     openapi_tags=tags_metadata,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.include_router(accounts_router)
@@ -136,3 +140,4 @@ app.include_router(comments_router)
 app.include_router(notifications_router)
 app.include_router(cart_router)
 app.include_router(orders_router)
+app.include_router(docs_router)
