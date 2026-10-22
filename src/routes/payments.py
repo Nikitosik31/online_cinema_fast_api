@@ -381,6 +381,39 @@ async def handle_checkout_expired(session: dict, db: AsyncSession) -> None:
     await db.commit()
 
 
+async def handle_charge_refunded(charge: dict, db: AsyncSession) -> None:
+    """
+    Mark a payment as refunded when Stripe reports a full refund.
+
+    Partial refunds are ignored: the payment becomes `refunded` only when
+    the whole amount was returned. Does nothing (and does not raise) when the
+    event cannot be applied, so that Stripe gets a 200 response: the charge
+    is not fully refunded, the payment is unknown, or it was already
+    refunded (a repeated delivery).
+
+    Args:
+        charge (dict): The Stripe Charge from the event.
+        db (AsyncSession): Database session.
+    """
+    if not charge.get("refunded"):
+        return
+
+    payment_intent = charge.get("payment_intent")
+    if not payment_intent:
+        return
+
+    payment = await db.scalar(
+        select(PaymentModel).where(
+            PaymentModel.external_payment_id == payment_intent
+        )
+    )
+    if not payment or payment.status != PaymentStatusEnum.SUCCESSFUL:
+        return
+
+    payment.status = PaymentStatusEnum.REFUNDED
+    await db.commit()
+
+
 @router.post(
     "/webhook/",
     summary="Stripe webhook",
@@ -453,6 +486,8 @@ async def stripe_webhook(
         await handle_checkout_completed(event["data"]["object"].to_dict(), db)
     elif event_type == "checkout.session.expired":
         await handle_checkout_expired(event["data"]["object"].to_dict(), db)
+    elif event_type == "charge.refunded":
+        await handle_charge_refunded(event["data"]["object"].to_dict(), db)
 
     return MessageResponseSchema(message="Event received")
 
