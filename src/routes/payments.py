@@ -1,6 +1,7 @@
 """Endpoints for paying for orders with Stripe and viewing payments."""
 
 from decimal import Decimal
+import logging
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
@@ -17,6 +18,7 @@ from database.models.payments import (
     PaymentStatusEnum,
     PaymentItemModel,
 )
+from notifications.email import send_email
 from schemas.accounts import MessageResponseSchema
 from schemas.payments import (
     PaymentCheckoutResponseSchema,
@@ -28,6 +30,7 @@ from config.config import get_settings
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 stripe.api_key = get_settings().stripe_secret_key
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -263,6 +266,8 @@ async def handle_checkout_completed(session: dict, db: AsyncSession) -> None:
         )
     ).all()
 
+    movie_ids = [item.movie_id for item in order_items]
+
     payment = PaymentModel(
         user_id=order.user_id,
         order_id=order.id,
@@ -291,13 +296,38 @@ async def handle_checkout_completed(session: dict, db: AsyncSession) -> None:
         await db.execute(
             delete(CartItemModel).where(
                 CartItemModel.cart_id == cart.id,
-                CartItemModel.movie_id.in_(
-                    [item.movie_id for item in order_items]
-                ),
+                CartItemModel.movie_id.in_(movie_ids),
             )
         )
 
     await db.commit()
+
+    user = await db.scalar(
+        select(UserModel).where(UserModel.id == order.user_id)
+    )
+    stmt = await db.scalars(
+        select(MovieModel.name).where(MovieModel.id.in_(movie_ids))
+    )
+    movies_paid = stmt.all()
+    movies_list = "\n".join(f"- {name}" for name in movies_paid)
+    body = (
+        "Hello!\n\n"
+        f"Thank you for your purchase. Your payment for order #{order.id} "
+        "has been received.\n\n"
+        f"Movies:\n{movies_list}\n\n"
+        f"Total: {order.total_amount} USD\n\n"
+        "Enjoy watching!\n"
+        "Online Cinema"
+    )
+
+    try:
+        await send_email(
+            to=user.email,
+            subject=f"Payment confirmation: order #{order.id}",
+            body=body,
+        )
+    except Exception:
+        logger.exception("Could not send the payment confirmation email")
 
 
 @router.post(
