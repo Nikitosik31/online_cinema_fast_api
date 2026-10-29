@@ -65,7 +65,11 @@ tags_metadata = [
     {"name": "Comments", "description": "Movie comments and replies."},
     {
         "name": "Notifications",
-        "description": "Notifications about replies and likes on the user's comments.",
+        "description": (
+            "Notifications about replies and likes on the user's comments. "
+            "New ones are also pushed in real time over WebSocket at "
+            "`/notifications/ws/` (see the API description)."
+        ),
     },
     {"name": "Cart", "description": "The current user's shopping cart."},
     {
@@ -100,6 +104,21 @@ API_DESCRIPTION = """
 Most endpoints require a JWT access token. Log in to get one, then send it in the `Authorization` header as `Authorization: Bearer <access_token>`.
 
 The access token is valid for 60 minutes. Use the refresh endpoint to get a new one without logging in again.
+
+## Real-time notifications (WebSocket)
+
+Swagger cannot display or try WebSocket endpoints, so this one is described
+here.
+
+Connect to `ws://<host>/notifications/ws/?token=<access_token>`. The token
+goes in the query string because browsers cannot set the `Authorization`
+header for WebSocket connections. If the token is invalid or expired, the
+server closes the connection with code `1008`.
+
+While connected, the server sends one JSON message for every new
+notification (a reply to your comment or a like on it). The message has the
+same fields as an item of `GET /notifications/`. Notifications created while
+you are offline are not pushed: fetch them with `GET /notifications/`.
 
 ## Roles
 

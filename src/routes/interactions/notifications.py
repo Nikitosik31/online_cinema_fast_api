@@ -1,15 +1,25 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    Query,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
 from database.models.interactions import NotificationModel
+from exceptions.security import InvalidTokenError, TokenExpiredError
+from notifications.websocket import manager
 from schemas.movies import (
     NotificationListResponseSchema,
     NotificationResponseSchema,
 )
-from security.dependencies import get_current_user
+from security.dependencies import get_current_user, get_jwt_token_manager
+from security.jwt_interfaces import JWTAuthManagerInterface
 
 router = APIRouter(
     prefix="/notifications",
@@ -134,3 +144,54 @@ async def read_notification(
     await db.refresh(notification)
 
     return NotificationResponseSchema.model_validate(notification)
+
+
+@router.websocket("/ws/", name="notifications_ws")
+async def notifications_ws(
+    websocket: WebSocket,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_postgresql_db),
+    jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_token_manager),
+):
+    """
+    Receive the current user's new notifications in real time.
+
+    Connect to `/notifications/ws/?token=<access_token>`. A browser cannot
+    send the `Authorization` header when opening a WebSocket, so the access
+    token is passed in the query string instead.
+
+    The connection is closed with code 1008 (policy violation) before it is
+    accepted if the token is missing, expired or invalid, or if the user no
+    longer exists. Once connected, the server pushes one JSON message for
+    every new notification (a reply to the user's comment or a like on it),
+    in the same format as the items of `GET /notifications/`. Messages sent
+    by the client are ignored. Notifications created while the user is
+    offline are not pushed: they are available through the list endpoint.
+
+    Args:
+        websocket (WebSocket): The incoming connection.
+        token (str): The access token of the user (query parameter).
+        db (AsyncSession): Database session (injected).
+        jwt_manager (JWTAuthManagerInterface): Token manager (injected).
+    """
+    try:
+        payload = jwt_manager.decode_access_token(token)
+    except (TokenExpiredError, InvalidTokenError):
+        await websocket.close(code=1008)
+        return
+
+    user = await db.scalar(
+        select(UserModel).where(UserModel.id == int(payload["sub"]))
+    )
+    if not user:
+        await websocket.close(code=1008)
+        return
+
+    await manager.connect(user.id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(user.id, websocket)

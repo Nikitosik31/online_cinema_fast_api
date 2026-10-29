@@ -13,6 +13,7 @@ from database.models.interactions import (
     NotificationTypeEnum,
 )
 from database.models.movies import MovieModel
+from notifications.websocket import manager
 from schemas.movies import (
     CommentResponseSchema,
     CommentRequestSchema,
@@ -20,6 +21,7 @@ from schemas.movies import (
     CommentReplyResponseSchema,
     CommentReactionResponseSchema,
     CommentReactionRequestSchema,
+    NotificationResponseSchema,
 )
 from security.dependencies import get_current_user
 
@@ -110,17 +112,27 @@ async def add_comment(
     db.add(comment)
     await db.flush()
 
+    notification = None
+
     if comment_with_parent and comment_with_parent.user_id != current_user.id:
-        db.add(
-            NotificationModel(
-                recipient_id=comment_with_parent.user_id,
-                sender_id=current_user.id,
-                comment_id=comment.id,
-                notification_type=NotificationTypeEnum.COMMENT_REPLY,
-            )
+        notification = NotificationModel(
+            recipient_id=comment_with_parent.user_id,
+            sender_id=current_user.id,
+            comment_id=comment.id,
+            notification_type=NotificationTypeEnum.COMMENT_REPLY,
         )
+        db.add(notification)
     await db.commit()
     await db.refresh(comment)
+
+    if notification:
+        await db.refresh(notification)
+        await manager.send_to_user(
+            notification.recipient_id,
+            NotificationResponseSchema.model_validate(notification).model_dump(
+                mode="json"
+            ),
+        )
 
     return CommentResponseSchema.model_validate(comment)
 
@@ -396,17 +408,27 @@ async def put_reaction_comment(
                 and not was_like
             )
 
+        notification = None
+
         if should_notify and db_comment.user_id != current_user.id:
-            db.add(
-                NotificationModel(
-                    recipient_id=db_comment.user_id,
-                    sender_id=current_user.id,
-                    comment_id=comment_id,
-                    notification_type=NotificationTypeEnum.COMMENT_LIKE,
-                )
+            notification = NotificationModel(
+                recipient_id=db_comment.user_id,
+                sender_id=current_user.id,
+                comment_id=comment_id,
+                notification_type=NotificationTypeEnum.COMMENT_LIKE,
             )
+            db.add(notification)
         await db.commit()
         await db.refresh(reaction)
+
+        if notification:
+            await db.refresh(notification)
+            await manager.send_to_user(
+                notification.recipient_id,
+                NotificationResponseSchema.model_validate(
+                    notification
+                ).model_dump(mode="json"),
+            )
 
     except IntegrityError:
         await db.rollback()
