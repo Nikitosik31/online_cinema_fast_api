@@ -1,10 +1,11 @@
 from sqlalchemy.exc import IntegrityError
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
+from database.models.cart import CartItemModel
 from database.models.movies import (
     GenreModel,
     StarModel,
@@ -12,6 +13,7 @@ from database.models.movies import (
     CertificationModel,
     DirectorModel,
 )
+from database.models.orders import OrderItemModel
 from schemas.movies import (
     GenreResponseSchema,
     GenreCreateUpdateRequestSchema,
@@ -529,3 +531,118 @@ async def patch_movie(
         raise HTTPException(status_code=400, detail="Invalid input data.")
 
     return MovieDetailResponseSchema.model_validate(db_movie)
+
+
+@router.delete(
+    "/{movie_id}/",
+    summary="Delete a Movie",
+    description=(
+        "Delete a movie from the catalog by its ID. Only available to "
+        "moderators and admins.\n\n"
+        "A movie that is part of any order (pending, paid or canceled) "
+        "cannot be deleted, so the order history stays intact.\n\n"
+        "If the movie is in users' carts, the request is rejected with a "
+        "warning. Pass `force=true` to delete it anyway: the movie then "
+        "disappears from those carts. Favorites, ratings, reactions and "
+        "comments of the movie are always deleted together with it."
+    ),
+    status_code=204,
+    responses={
+        404: {
+            "description": "Movie with this id does not exist",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Movie with this id does not exist",
+                    }
+                }
+            },
+        },
+        409: {
+            "description": (
+                "The movie cannot be deleted: it is part of existing orders, "
+                "or it is in users' carts and `force` is not set"
+            ),
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "in_orders": {
+                            "summary": "Movie is part of orders",
+                            "value": {
+                                "detail": "Movie is part of existing orders and cannot be deleted"
+                            },
+                        },
+                        "in_carts": {
+                            "summary": "Movie is in carts, force not set",
+                            "value": {
+                                "detail": "Movie is in 3 carts, pass ?force=true to delete anyway"
+                            },
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def delete_movie(
+    movie_id: int,
+    force: bool = Query(
+        default=False,
+        description=(
+            "Delete the movie even if it is in users' carts. "
+            "It does not bypass the check for orders."
+        ),
+    ),
+    current_user: UserModel = Depends(require_moderator),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    """
+    Delete a movie from the catalog.
+
+    Checks run in this order:
+    1. The movie must exist, otherwise 404.
+    2. The movie must not be in any order, otherwise 409.
+    3. If the movie is in carts and `force` is false, 409 with the number
+       of carts. With `force=true` it is removed from those carts.
+
+    Favorites, ratings, reactions and comments are removed by the
+    database (`ondelete="CASCADE"`).
+    """
+
+    db_movie = await db.scalar(
+        select(MovieModel).where(MovieModel.id == movie_id)
+    )
+    if not db_movie:
+        raise HTTPException(
+            status_code=404, detail="Movie with this id does not exist"
+        )
+
+    stmt = (
+        select(OrderItemModel.id)
+        .where(OrderItemModel.movie_id == movie_id)
+        .limit(1)
+    )
+    movie_in_orders = await db.scalar(stmt)
+
+    if movie_in_orders is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie is part of existing orders and cannot be deleted",
+        )
+
+    stmt = (
+        select(func.count())
+        .select_from(CartItemModel)
+        .where(CartItemModel.movie_id == movie_id)
+    )
+    count_carts = await db.scalar(stmt)
+
+    if count_carts > 0 and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Movie is in {count_carts} carts, pass ?force=true to delete anyway",
+        )
+
+    await db.delete(db_movie)
+    await db.commit()
+    return
