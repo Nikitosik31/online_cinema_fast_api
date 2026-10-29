@@ -383,7 +383,7 @@ async def handle_checkout_expired(session: dict, db: AsyncSession) -> None:
 
 async def handle_charge_refunded(charge: dict, db: AsyncSession) -> None:
     """
-    Mark a payment as refunded when Stripe reports a full refund.
+    Mark a payment as refunded and cancel its order when Stripe reports a full refund.
 
     Partial refunds are ignored: the payment becomes `refunded` only when
     the whole amount was returned. Does nothing (and does not raise) when the
@@ -411,6 +411,13 @@ async def handle_charge_refunded(charge: dict, db: AsyncSession) -> None:
         return
 
     payment.status = PaymentStatusEnum.REFUNDED
+
+    order = await db.scalar(
+        select(OrderModel).where(OrderModel.id == payment.order_id)
+    )
+    if order:
+        order.status = OrderStatusEnum.CANCELED
+
     await db.commit()
 
 
@@ -611,3 +618,107 @@ async def list_payments(
         db,
         "/payments/",
     )
+
+
+@router.post(
+    "/{payment_id}/refund/",
+    response_model=MessageResponseSchema,
+    summary="Request a refund",
+    description=(
+        "Asks Stripe to return the full amount of one of the current user's "
+        "successful payments. The request only starts the refund: the "
+        "payment becomes `refunded` and its order becomes `canceled` when "
+        "Stripe confirms the refund through the webhook, not by this "
+        "request. Partial refunds are not supported. A payment that is not "
+        "successful (already refunded or canceled) cannot be refunded. "
+        "Authentication required."
+    ),
+    status_code=202,
+    responses={
+        401: {
+            "description": "Not authenticated or invalid/expired token.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Token is invalid."}
+                }
+            },
+        },
+        404: {
+            "description": (
+                "Payment not found, or it belongs to another user"
+            ),
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Payment not found"}
+                }
+            },
+        },
+        409: {
+            "description": "The payment cannot be refunded",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Only successful payments can be refunded"
+                    }
+                }
+            },
+        },
+        502: {
+            "description": "The payment service (Stripe) is unavailable",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Payment service is unavailable"}
+                }
+            },
+        },
+    },
+)
+async def request_refund(
+    payment_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_postgresql_db),
+):
+    """
+    Request a full refund of a successful payment.
+
+    Checks run in this order:
+    1. The payment must exist and belong to the current user, otherwise
+       404 (the same answer for another user's payment, so its existence
+       is not revealed).
+    2. The payment must be `successful`, otherwise 409.
+    3. Stripe is asked to refund the whole payment. If Stripe is
+       unreachable or rejects the request, 502.
+
+    The payment and its order are updated later by the `charge.refunded`
+    webhook, which is the only source of truth for the refund result.
+    """
+
+    db_payment = await db.scalar(
+        select(PaymentModel).where(
+            PaymentModel.id == payment_id,
+            PaymentModel.user_id == current_user.id,
+        )
+    )
+    if not db_payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    if db_payment.status != PaymentStatusEnum.SUCCESSFUL:
+        raise HTTPException(
+            status_code=409, detail="Only successful payments can be refunded"
+        )
+
+    if not db_payment.external_payment_id:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    try:
+        await stripe.Refund.create_async(
+            payment_intent=db_payment.external_payment_id,
+            idempotency_key=f"refund-{db_payment.id}",
+        )
+    except stripe.StripeError:
+        logger.exception("Stripe refund failed for payment %s", db_payment.id)
+        raise HTTPException(
+            status_code=502, detail="Payment service is unavailable"
+        )
+
+    return MessageResponseSchema(message="Refund requested")
