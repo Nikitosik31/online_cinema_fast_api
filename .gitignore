@@ -11,7 +11,6 @@ venv/
 # Env / secrets
 .env
 .env.*
-!.env.sample
 .env.test
 
 # IDE
