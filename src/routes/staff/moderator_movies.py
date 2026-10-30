@@ -2,6 +2,7 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.database import get_postgresql_db
 from database.models.accounts import UserModel
@@ -47,6 +48,38 @@ router = APIRouter(
         },
     },
 )
+
+
+async def get_or_create_by_name(
+    model: type[GenreModel] | type[StarModel] | type[DirectorModel],
+    names: list[str],
+    db: AsyncSession,
+) -> list:
+    """
+    Find the records with the given names, creating the ones that do not exist.
+
+    Used for genres, stars and directors, which are all identified by a
+    unique name. Repeated names in the list are ignored. New records are
+    flushed to the database but not committed: the caller commits.
+
+    Args:
+        model (type): The model to search in: `GenreModel`, `StarModel`
+            or `DirectorModel`.
+        names (list[str]): The names, in the order they should appear.
+        db (AsyncSession): Database session.
+
+    Returns:
+        list: The model instances, one per unique name.
+    """
+    items = []
+    for name in dict.fromkeys(names):
+        item = await db.scalar(select(model).where(model.name == name))
+        if not item:
+            item = model(name=name)
+            db.add(item)
+            await db.flush()
+        items.append(item)
+    return items
 
 
 @router.post(
@@ -367,49 +400,11 @@ async def create_movie(
         )
 
     try:
-        genres = []
-        for genre in movie_data.genres:
-            existing_genre = await db.scalar(
-                select(GenreModel).where(
-                    GenreModel.name == genre,
-                )
-            )
-            if existing_genre:
-                genres.append(existing_genre)
-
-            else:
-                new_genre = GenreModel(name=genre)
-                db.add(new_genre)
-                await db.flush()
-                genres.append(new_genre)
-
-        stars = []
-        for star in movie_data.stars:
-            existing_star = await db.scalar(
-                select(StarModel).where(StarModel.name == star)
-            )
-            if existing_star:
-                stars.append(existing_star)
-
-            else:
-                new_star = StarModel(name=star)
-                db.add(new_star)
-                await db.flush()
-                stars.append(new_star)
-
-        directors = []
-        for director in movie_data.directors:
-            existing_director = await db.scalar(
-                select(DirectorModel).where(DirectorModel.name == director)
-            )
-            if existing_director:
-                directors.append(existing_director)
-
-            else:
-                new_director = DirectorModel(name=director)
-                db.add(new_director)
-                await db.flush()
-                directors.append(new_director)
+        genres = await get_or_create_by_name(GenreModel, movie_data.genres, db)
+        stars = await get_or_create_by_name(StarModel, movie_data.stars, db)
+        directors = await get_or_create_by_name(
+            DirectorModel, movie_data.directors, db
+        )
 
         movie = MovieModel(
             name=movie_data.name,
@@ -475,7 +470,13 @@ async def patch_movie(
     db: AsyncSession = Depends(get_postgresql_db),
 ):
     db_movie = await db.scalar(
-        select(MovieModel).where(MovieModel.id == movie_id)
+        select(MovieModel)
+        .where(MovieModel.id == movie_id)
+        .options(
+            selectinload(MovieModel.genres),
+            selectinload(MovieModel.stars),
+            selectinload(MovieModel.directors),
+        )
     )
     if not db_movie:
         raise HTTPException(
@@ -518,10 +519,26 @@ async def patch_movie(
             detail="Movie with this name, year and time already exists",
         )
 
-    for field, value in movie_data.model_dump(exclude_unset=True).items():
-        setattr(db_movie, field, value)
+    update_data = movie_data.model_dump(exclude_unset=True)
+    relation_models = {
+        "genres": GenreModel,
+        "stars": StarModel,
+        "directors": DirectorModel,
+    }
 
     try:
+        for field, model in relation_models.items():
+            names = update_data.pop(field, None)
+            if names is not None:
+                setattr(
+                    db_movie,
+                    field,
+                    await get_or_create_by_name(model, names, db),
+                )
+
+        for field, value in update_data.items():
+            setattr(db_movie, field, value)
+
         await db.commit()
         await db.refresh(
             db_movie, ["certification", "genres", "stars", "directors"]

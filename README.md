@@ -218,7 +218,7 @@ The tests use a **separate PostgreSQL database**, so they never touch your devel
 **1. Create the test database** (PostgreSQL must be running):
 
 ```bash
-docker compose exec db psql -U postgres -c "CREATE DATABASE movies_db_test;"
+docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE DATABASE movies_db_test;"'
 ```
 
 **2. Create `.env.test`** next to `.env`. It has the same variables as `.env`, but with `POSTGRES_DB=movies_db_test` and `POSTGRES_HOST=localhost`. The file is in `.gitignore`.

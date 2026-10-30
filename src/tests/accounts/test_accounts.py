@@ -423,6 +423,32 @@ async def test_user_password_reset_request_success(client, active_user):
     assert password_reset_token
 
 
+async def test_user_password_reset_request_twice(client, active_user):
+    async def request_reset():
+        res = await client.post(
+            "/password_reset/request/",
+            json={"email": active_user["email"]},
+        )
+        assert res.status_code == 200
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            tokens = (
+                await session.scalars(
+                    select(PasswordResetTokenModel).where(
+                        PasswordResetTokenModel.user_id == active_user["id"]
+                    )
+                )
+            ).all()
+        return tokens
+
+    first = await request_reset()
+    second = await request_reset()
+
+    assert len(first) == 1
+    assert len(second) == 1
+    assert first[0].token != second[0].token
+
+
 async def test_user_password_reset_request_email_not_found(
     client, active_user
 ):

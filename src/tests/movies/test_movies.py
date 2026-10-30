@@ -1,4 +1,5 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
+from routes.staff.moderator_movies import get_or_create_by_name
 
 from database.models.movies import (
     CertificationModel,
@@ -158,6 +159,83 @@ class TestUpdateMovie:
 
         assert update_res.status_code == 200
 
+    async def test_update_movie_genres_stars_directors(
+        self, client, moderator_user, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={
+                "genres": ["Drama", "Thriller"],
+                "stars": ["Brad Pitt"],
+                "directors": ["David Fincher"],
+            },
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        assert update_res.status_code == 200
+        data = update_res.json()
+        assert sorted(g["name"] for g in data["genres"]) == [
+            "Drama",
+            "Thriller",
+        ]
+        assert [s["name"] for s in data["stars"]] == ["Brad Pitt"]
+        assert [d["name"] for d in data["directors"]] == ["David Fincher"]
+
+    async def test_update_movie_reuses_existing_genre(
+        self, client, moderator_user, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={"genres": ["Sci-Fi", "Sci-Fi"]},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        assert update_res.status_code == 200
+        assert [g["name"] for g in update_res.json()["genres"]] == ["Sci-Fi"]
+
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            genres = (
+                await session.scalars(
+                    select(GenreModel).where(GenreModel.name == "Sci-Fi")
+                )
+            ).all()
+        assert len(genres) == 1
+
+    async def test_update_movie_empty_genres_clears_them(
+        self, client, moderator_user, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={"genres": []},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        assert update_res.status_code == 200
+        assert update_res.json()["genres"] == []
+
+    async def test_update_movie_null_genres_keeps_them(
+        self, client, moderator_user, existing_movie
+    ):
+        update_res = await client.patch(
+            f"/movies/{existing_movie['id']}/",
+            json={"genres": None},
+            headers={
+                "Authorization": f"Bearer {moderator_user['access_token']}"
+            },
+        )
+
+        assert update_res.status_code == 200
+        assert sorted(g["name"] for g in update_res.json()["genres"]) == [
+            "Action",
+            "Sci-Fi",
+        ]
+
     async def test_update_movie_not_found(self, client, moderator_user):
         update_res = await client.patch(
             "/movies/99999999/",
@@ -270,3 +348,30 @@ class TestGetMovieByGenre:
 
         assert genres_by_name["Sci-Fi"] >= 1
         assert genres_by_name["Action"] >= 1
+
+
+class TestGetOrCreateByName:
+    async def test_creates_missing_and_reuses_existing(self):
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            first = await get_or_create_by_name(GenreModel, ["Drama"], session)
+            await session.commit()
+
+            second = await get_or_create_by_name(
+                GenreModel, ["Drama", "Horror"], session
+            )
+            await session.commit()
+
+            total = await session.scalar(select(func.count(GenreModel.id)))
+
+        assert second[0].id == first[0].id
+        assert [g.name for g in second] == ["Drama", "Horror"]
+        assert total == 2
+
+    async def test_removes_duplicate_names(self):
+        async with test_AsyncPostgresqlSessionLocal() as session:
+            genres = await get_or_create_by_name(
+                GenreModel, ["Drama", "Drama", "Horror"], session
+            )
+            await session.commit()
+
+        assert [g.name for g in genres] == ["Drama", "Horror"]

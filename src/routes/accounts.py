@@ -498,6 +498,14 @@ async def reset_password(
         return MessageResponseSchema(
             message="If this email is registered, a password reset link has been sent.",
         )
+    old_token = await db.scalar(
+        select(PasswordResetTokenModel).where(
+            PasswordResetTokenModel.user_id == user.id
+        )
+    )
+    if old_token:
+        await db.delete(old_token)
+        await db.flush()
 
     try:
         reset_token = PasswordResetTokenModel(
