@@ -4,3 +4,4 @@ from routes.cart import router as cart_router
 from routes.orders import router as orders_router
 from routes.docs import router as docs_router
 from routes.payments import router as payments_router
+from routes.profile import router as profile_router

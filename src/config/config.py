@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         smtp_port (int): SMTP server port.
         stripe_secret_key (str): Stripe secret API key (test mode keys start with `sk_test_`).
         stripe_webhook_secret (str): Secret used to verify that webhook requests come from Stripe.
+        minio_endpoint (str): MinIO address used by the application, `host:port` without a scheme.
+        minio_access_key (str): MinIO access key (root user in development).
+        minio_secret_key (str): MinIO secret key (root password in development).
+        minio_bucket (str): Name of the bucket where avatars are stored.
+        minio_public_url (str): Base URL that browsers use to open stored files, without a trailing slash.
     """
 
     postgres_db: str
@@ -47,6 +52,12 @@ class Settings(BaseSettings):
 
     stripe_secret_key: str
     stripe_webhook_secret: str
+
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_bucket: str
+    minio_public_url: str
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 

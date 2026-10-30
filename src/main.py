@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 
@@ -13,6 +14,7 @@ from routes import (
     orders_router,
     docs_router,
     payments_router,
+    profile_router,
 )
 from routes.staff import (
     admin_router,
@@ -26,6 +28,9 @@ from routes.interactions import (
     comments_router,
     notifications_router,
 )
+from storage.minio import ensure_bucket
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -33,14 +38,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Run code at application startup and shutdown.
 
-    On startup it seeds the reference data (user groups and certifications).
-    Database tables are created separately by Alembic migrations. Nothing is
-    needed on shutdown.
+    On startup it seeds the reference data (user groups and certifications)
+    and makes sure the MinIO bucket for avatars exists. If MinIO is not
+    available, a warning is logged and the application still starts, only
+    the avatar endpoints do not work. Database tables are created separately
+    by Alembic migrations. Nothing is needed on shutdown.
 
     Args:
         app (FastAPI): The application instance.
     """
     await seed_db()
+    try:
+        await ensure_bucket()
+    except Exception:
+        logger.warning(
+            "Could not prepare the MinIO bucket: avatars are unavailable",
+            exc_info=True,
+        )
     yield
 
 
@@ -85,6 +99,10 @@ tags_metadata = [
         "name": "Moderator: Carts, Orders & Payments",
         "description": "Moderator views of users' carts and orders.",
     },
+    {
+        "name": "Profile",
+        "description": "The current user's profile: name, gender, date of birth, info and avatar.",
+    },
 ]
 
 
@@ -94,6 +112,7 @@ API_DESCRIPTION = """
 ## What you can do
 
 * **Accounts**: register, activate the account by email, log in and reset the password.
+* **Profile**: fill in your profile and upload or delete an avatar (JPEG, PNG or WebP, up to 2 MB).
 * **Movies**: browse the catalog with search, filtering and sorting.
 * **Interaction**: favorites, ratings, comments with replies, likes and dislikes, and notifications about replies and likes.
 * **Shopping**: put movies in the cart and place an order.
@@ -162,3 +181,4 @@ app.include_router(cart_router)
 app.include_router(orders_router)
 app.include_router(docs_router)
 app.include_router(payments_router)
+app.include_router(profile_router)

@@ -3,6 +3,7 @@ x-app-environment: &app-environment
   REDIS_HOST: redis
   SMTP_HOST: mailhog
   SMTP_PORT: "1025"
+  MINIO_ENDPOINT: minio:9000
 
 x-app-common: &app-common
   build: .
@@ -57,8 +58,8 @@ services:
     container_name: minio_cinema_theater
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
