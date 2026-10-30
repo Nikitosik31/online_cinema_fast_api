@@ -187,11 +187,14 @@ async def notifications_ws(
         await websocket.close(code=1008)
         return
 
-    await manager.connect(user.id, websocket)
+    user_id = user.id
+    await db.close()
+
+    await manager.connect(user_id, websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
-        manager.disconnect(user.id, websocket)
+        manager.disconnect(user_id, websocket)
