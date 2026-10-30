@@ -1,0 +1,99 @@
+"""Application settings loaded from environment variables and the .env file."""
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+class Settings(BaseSettings):
+    """
+    Application configuration.
+
+    Values are read from environment variables, falling back to the `.env`
+    file in the project root (see `BASE_DIR`). Every field is required: the
+    application will not start if one of them is missing.
+
+    Attributes:
+        postgres_db (str): PostgreSQL database name.
+        postgres_db_port (int): PostgreSQL port.
+        postgres_user (str): PostgreSQL user.
+        postgres_password (str): PostgreSQL password.
+        postgres_host (str): PostgreSQL host.
+        jwt_secret_key (str): Secret used to sign JWT access tokens.
+        redis_host (str): Redis host (Celery broker and result backend).
+        redis_port (int): Redis port.
+        smtp_host (str): SMTP server host used to send emails.
+        smtp_port (int): SMTP server port.
+        stripe_secret_key (str): Stripe secret API key (test mode keys start with `sk_test_`).
+        stripe_webhook_secret (str): Secret used to verify that webhook requests come from Stripe.
+        minio_endpoint (str): MinIO address used by the application, `host:port` without a scheme.
+        minio_access_key (str): MinIO access key (root user in development).
+        minio_secret_key (str): MinIO secret key (root password in development).
+        minio_bucket (str): Name of the bucket where avatars are stored.
+        minio_public_url (str): Base URL that browsers use to open stored files, without a trailing slash.
+    """
+
+    postgres_db: str
+    postgres_db_port: int
+    postgres_user: str
+    postgres_password: str
+    postgres_host: str
+
+    jwt_secret_key: str
+
+    redis_host: str
+    redis_port: int
+
+    smtp_host: str
+    smtp_port: int
+
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_bucket: str
+    minio_public_url: str
+
+    model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
+
+    @property
+    def postgres_url(self) -> str:
+        """
+        Build the async SQLAlchemy connection URL for PostgreSQL.
+
+        Returns:
+            str: URL in the `postgresql+asyncpg://user:password@host:port/db` form.
+        """
+
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_db_port}/{self.postgres_db}"
+
+    @property
+    def redis_url(self) -> str:
+        """
+        Build the Redis connection URL (database 0).
+
+        Returns:
+            str: URL in the `redis://host:port/0` form.
+        """
+
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """
+    Return the application settings.
+
+    The result is cached, so the `.env` file is read only once. Used as a
+    FastAPI dependency and directly by modules that need configuration.
+
+    Returns:
+        Settings: The shared settings instance.
+    """
+
+    return Settings()

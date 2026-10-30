@@ -1,0 +1,33 @@
+# Version control and IDE
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.DS_Store
+
+# Virtual environments and caches
+.venv
+venv
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Secrets and local configuration (values come from docker-compose)
+.env
+.env.*
+.env_sample
+
+# Tests and coverage
+src/tests
+.coverage
+htmlcov
+
+# Documentation and Docker files themselves
+**/*.md
+Dockerfile
+docker-compose*.yml
+.dockerignore

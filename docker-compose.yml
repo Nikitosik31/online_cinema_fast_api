@@ -1,0 +1,88 @@
+x-app-environment: &app-environment
+  POSTGRES_HOST: db
+  REDIS_HOST: redis
+  SMTP_HOST: mailhog
+  SMTP_PORT: "1025"
+  MINIO_ENDPOINT: minio:9000
+
+x-app-common: &app-common
+  build: .
+  image: online-cinema
+  env_file:
+    - .env
+  environment: *app-environment
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    mailhog:
+      condition: service_started
+
+services:
+  db:
+    image: 'postgres:16'
+    container_name: postgres_cinema_theater
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: 'redis:7-alpine'
+    container_name: redis_cinema_theater
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailhog:
+    image: 'mailhog/mailhog'
+    container_name: mailhog_cinema_theater
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  minio:
+    image: 'minio/minio'
+    container_name: minio_cinema_theater
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  app:
+    <<: *app-common
+    container_name: app_cinema_theater
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  celery_worker:
+    <<: *app-common
+    container_name: celery_worker_cinema_theater
+    command: celery -A celery_app worker --loglevel=info
+
+  celery_beat:
+    <<: *app-common
+    container_name: celery_beat_cinema_theater
+    command: celery -A celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
+  minio_data:
